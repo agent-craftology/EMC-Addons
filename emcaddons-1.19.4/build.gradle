@@ -63,6 +63,10 @@ jar {
 	}
 }
 
+def emcJarName = "EMC Addons ${project.mod_version}-${project.minecraft_version}.jar"
+tasks.named("jar").configure { archiveFileName.set(emcJarName) }
+tasks.named("remapJar").configure { archiveFileName.set(emcJarName) }
+
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {

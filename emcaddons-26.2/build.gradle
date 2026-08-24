@@ -26,9 +26,13 @@ loom {
 
 // splitEnvironmentSourceSets() puts GUI in `client`. Loom's jar up-to-date
 // checks often miss those outputs, so `gradlew build` can leave build/libs stale.
+def emcJarName = "EMC Addons ${project.mod_version}-${project.minecraft_version}.jar"
 afterEvaluate {
 	def clientOut = sourceSets.client.output
-	tasks.named("jar").configure { inputs.files(clientOut) }
+	tasks.named("jar").configure {
+		inputs.files(clientOut)
+		archiveFileName.set(emcJarName)
+	}
 	sourceSets.test.compileClasspath += clientOut
 	sourceSets.test.runtimeClasspath += clientOut
 }

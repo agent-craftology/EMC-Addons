@@ -8,6 +8,7 @@
 		"Ben - Discord: agent_."
 	],
 	"license": "MIT",
+	"icon": "assets/emcaddons/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
