@@ -1,0 +1,29 @@
+{
+	"schemaVersion": 1,
+	"id": "emcaddons",
+	"version": "${version}",
+	"name": "EMC Addons",
+	"description": "Free EMC GUI, HUD stats, and config profiles",
+	"authors": [
+		"Craftology Inc"
+	],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.emcaddons.EmcAddons"
+		],
+		"client": [
+			"com.emcaddons.EmcAddonsClient"
+		]
+	},
+	"mixins": [
+		"emcaddons.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.14.0",
+		"minecraft": "~1.19.4",
+		"java": ">=17",
+		"fabric-api": "*"
+	}
+}

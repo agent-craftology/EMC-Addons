@@ -1,0 +1,12 @@
+{
+	"required": true,
+	"package": "com.emcaddons.mixin.client",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"ClientPlayNetworkHandlerMixin",
+		"WindowMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

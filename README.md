@@ -6,10 +6,14 @@ This is **not** the paid EMC Bundle. There is no automation.
 
 ## Versions
 
-Two Gradle projects:
+Gradle projects:
 
 - `emcaddons-1.18.2`
+- `emcaddons-1.19.4`
 - `emcaddons-1.20.6`
+- `emcaddons-1.21`
+- `emcaddons-1.21.11`
+- `emcaddons-26.2`
 
 Default open-GUI keybind: **Right Alt**
 
