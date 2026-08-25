@@ -4,8 +4,6 @@ Free public **Fabric client** mod for **EnchantedMC** (not EarthMC). It adds a c
 
 **Author:** Ben (Discord: `agent_.`). Co-contributor: Craftology Inc. Licensed under [MIT](LICENSE).
 
-This is **not** the paid EMC Bundle. There is **no automation**.
-
 Current release: **1.0**.
 
 ## Features
