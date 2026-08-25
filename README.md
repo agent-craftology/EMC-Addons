@@ -10,8 +10,8 @@ Current release: **1.0**.
 
 ## Features
 
-- Click GUI with **Settings**, **Config**, and **HUD** pages
-- HUD cards for **Souls**, **Essence**, **Shards**, **Credits**, **Money**, **Swings**, **Rebirth**, plus a sparkline **Graph**
+- Click GUI with **HOME** (Modules) and **CONFIGURATION** (Settings, Config)
+- HUD cards for **Souls**, **Essence**, **Shards**, **Credits**, **Money**, **Swings**, **Rebirth**, **Grind Time**, plus a sparkline **Graph**
 - Named config profiles under `.minecraft/config/emcaddons/`
 - Client-only `/config` commands that are never sent to the server
 - Shareable `.cbshare` packs (ZIP + manifest) for the same Minecraft version
@@ -40,11 +40,13 @@ Rebind it in **Options → Controls → EMC Addons → Open menu**, or from the 
 
 Pages:
 
-- **Settings** — appearance and the Open menu key
-- **Config** — named profiles, create/import, and search
-- **HUD** — visibility, rows, graph currency, and layout editing
+- **HOME**
+  - **Modules** — 3-column title + description grid (no icons). Dungeons has a short explanation; Gens, Factories, Skyblock, and Prisons show **Coming Soon!** (default page)
+- **CONFIGURATION**
+  - **Settings** — appearance, the Open menu key, and HUD layout
+  - **Config** — named profiles, create/import, and search
 
-Search is on the **Config** page and filters the profile list.
+Search is on the **Config** page and filters the profile list. Show HUD, EMC Stats card visible, Advanced stats, and EMC Stats rows live on **Modules → Dungeons**. Edit layout and Reset positions stay on **Settings**.
 
 ## Settings
 
@@ -60,7 +62,7 @@ Appearance and keybinds:
 
 ## HUD
 
-Stats are read from the EnchantedMC sidebar. Cards can show:
+HUD tracker controls live on **Modules → Dungeons**. Stats are read from the EnchantedMC sidebar. Cards can show:
 
 - **Souls**
 - **Essence**
@@ -69,17 +71,27 @@ Stats are read from the EnchantedMC sidebar. Cards can show:
 - **Money**
 - **Swings**
 - **Rebirth**
+- **Grind Time** — how long you have been grinding this session (`45s`, `12m 05s`, or `1h 23m 45s`)
 - **Graph** — a sparkline of session progress for one of the five currencies
 
-HUD page controls:
+Tracker controls on **Modules → Dungeons**:
 
 - **Show HUD** — master toggle for all cards
 - **EMC Stats card visible** — show or hide the stats card
 - **Advanced stats** — extra detail on the card
-- **EMC Stats rows** — per-row toggles for Souls, Essence, Shards, Credits, Money, Swings, Rebirth, and Graph
-- **Graph currency** — which of the five currencies (Souls, Essence, Shards, Credits, Money) the sparkline tracks
+- **EMC Stats rows** — per-row toggles for Souls, Essence, Shards, Credits, Money, Swings, Rebirth, Graph, and Grind Time
+- **Graph currency** — which of the five currencies (Souls, Essence, Shards, Credits, Money) the sparkline tracks (on the rows page)
+
+Settings HUD keeps layout tools:
+
 - **Edit layout…** — drag cards on screen; they snap to corners; **Esc** saves and exits
 - **Reset positions** — restore default card placement
+
+On **1.18.2** and **1.19.4**, Settings HUD also has **HUD opacity** and **HUD scale**.
+
+**Grind Time** pauses in the EnchantedMC Hub and while disconnected. Session earned, `/hr` rates, and the sparkline also do not count while the Hub (or an unknown sidebar) is showing. Frozen last values can still render; they just do not increment. Switching Hub ↔ dungeon does not reset stats.
+
+Each Modules card has **Reset statistics**. Dungeons clears session earned, rates, sparkline, and grind time. Gens, Factories, Skyblock, and Prisons are **Coming Soon!** with empty per-mode buckets until those stats exist.
 
 Cards only populate while EnchantedMC is showing the matching sidebar lines. If a currency is missing from the sidebar, that row stays empty until it appears.
 

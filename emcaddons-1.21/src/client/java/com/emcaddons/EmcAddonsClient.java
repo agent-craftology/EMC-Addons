@@ -145,6 +145,7 @@ public class EmcAddonsClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             try {
+                emcStatsScoreboard.update(client);
                 while (guiKeyBinding.wasPressed()) {
                     client.setScreen(new ClickGuiScreen(this));
                 }

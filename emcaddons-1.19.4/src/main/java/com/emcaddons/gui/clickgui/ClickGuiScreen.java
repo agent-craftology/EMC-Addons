@@ -22,7 +22,7 @@ import java.util.Locale;
 public class ClickGuiScreen extends Screen {
 
     public enum Page {
-        SETTINGS, CONFIG, HUD, HUD_ROWS
+        MODULES, SETTINGS, CONFIG, SETTINGS_ROWS, MODULE
     }
 
     private static final Identifier LOGO = new Identifier("emcaddons", "textures/gui/logo.png");
@@ -34,15 +34,16 @@ public class ClickGuiScreen extends Screen {
     private final List<SettingRow> rows = new ArrayList<>();
     private final List<GuiTextField> fields = new ArrayList<>();
 
-    private Page page = Page.SETTINGS;
+    private Page page = Page.MODULES;
     private int contentScrollTarget;
     private final Anim scrollAnim = new Anim(0f);
     private ConfigListPanel configList;
     private String configNameDraft = "";
+    private ModuleGridRow.Mode selectedMode = ModuleGridRow.Mode.DUNGEONS;
 
     private int winX, winY, winW, winH;
     private int contentX, contentY, contentW, contentH;
-    private int navSettingsY, navConfigY, navHudY;
+    private int navModulesY, navSettingsY, navConfigY;
     private final java.util.Map<Page, Anim> navAnims = new java.util.EnumMap<>(Page.class);
 
     private boolean draggingScrollbar;
@@ -95,10 +96,11 @@ public class ClickGuiScreen extends Screen {
         fields.clear();
 
         switch (page) {
+            case MODULES -> buildModules();
             case SETTINGS -> buildSettings();
             case CONFIG -> buildConfig();
-            case HUD -> buildHud();
-            case HUD_ROWS -> buildHudRows();
+            case SETTINGS_ROWS -> buildSettingsRows();
+            case MODULE -> buildModule();
         }
         for (SettingRow row : rows) {
             row.collectFields(fields::add);
@@ -122,6 +124,17 @@ public class ClickGuiScreen extends Screen {
                 () -> mod.setWindowIconEnabled(!mod.isWindowIconEnabled())));
         rows.add(new SettingRow.Section("CONTROLS"));
         rows.add(new SettingRow.Keybind("Open menu", mod::getGuiOpenMenuKey, mod::setGuiOpenMenuKey, false));
+        rows.add(new SettingRow.Section("HUD"));
+        rows.add(new SettingRow.Button("Edit HUD layout", () -> {
+            if (client != null) client.setScreen(new com.emcaddons.gui.HudEditScreen(mod.getHudLayoutManager(), mod::persistHudLayout));
+        }));
+        rows.add(new SettingRow.Button("Reset positions", () -> mod.getHudLayoutManager().resetPositions()));
+        rows.add(new SettingRow.Slider("HUD opacity", GuiTheme.OPACITY_MIN, GuiTheme.OPACITY_MAX, 1, "%",
+                mod::getHudOpacity, mod::setHudOpacity));
+        rows.add(new SettingRow.Slider("HUD scale", HudLayoutManager.SCALE_MIN, HudLayoutManager.SCALE_MAX,
+                HudLayoutManager.SCALE_STEP, "%",
+                () -> mod.getHudLayoutManager().getScalePercent(),
+                pct -> mod.getHudLayoutManager().setScalePercent(pct)));
     }
 
     private void buildConfig() {
@@ -203,30 +216,38 @@ public class ClickGuiScreen extends Screen {
         }
     }
 
-    private void buildHud() {
-        rows.add(new SettingRow.Toggle("Show HUD",
-                () -> mod.getHudLayoutManager().isMasterVisible(),
-                () -> {
-                    mod.getHudLayoutManager().setMasterVisible(!mod.getHudLayoutManager().isMasterVisible());
-                    mod.persistHudLayout();
-                }));
-        rows.add(hudVisibleToggle("EMC Stats", "emcstats"));
-        rows.add(hudAdvancedToggle("EMC Stats advanced stats", "emcstats"));
-        rows.add(new SettingRow.Button("EMC Stats rows", () -> setPage(Page.HUD_ROWS)));
-        rows.add(new SettingRow.Button("Edit HUD layout", () -> {
-            if (client != null) client.setScreen(new com.emcaddons.gui.HudEditScreen(mod.getHudLayoutManager(), mod::persistHudLayout));
-        }));
-        rows.add(new SettingRow.Button("Reset positions", () -> mod.getHudLayoutManager().resetPositions()));
-        rows.add(new SettingRow.Section("APPEARANCE"));
-        rows.add(new SettingRow.Slider("HUD opacity", GuiTheme.OPACITY_MIN, GuiTheme.OPACITY_MAX, 1, "%",
-                mod::getHudOpacity, mod::setHudOpacity));
-        rows.add(new SettingRow.Slider("HUD scale", HudLayoutManager.SCALE_MIN, HudLayoutManager.SCALE_MAX,
-                HudLayoutManager.SCALE_STEP, "%",
-                () -> mod.getHudLayoutManager().getScalePercent(),
-                pct -> mod.getHudLayoutManager().setScalePercent(pct)));
+    private void buildModules() {
+        rows.add(new ModuleGridRow(this::openModule));
     }
 
-    private void buildHudRows() {
+    private void openModule(ModuleGridRow.Mode mode) {
+        selectedMode = mode == null ? ModuleGridRow.Mode.DUNGEONS : mode;
+        setPage(Page.MODULE);
+    }
+
+    private void buildModule() {
+        ModuleGridRow.Mode mode = selectedMode == null ? ModuleGridRow.Mode.DUNGEONS : selectedMode;
+        rows.add(new SettingRow.Section(mode.title.toUpperCase(Locale.ROOT)));
+        if (mode.comingSoon()) {
+            rows.add(new SettingRow.Label(() -> "Coming Soon!", () -> GuiTheme.MUTED));
+        } else {
+            rows.add(new SettingRow.Toggle("Show HUD",
+                    () -> mod.getHudLayoutManager().isMasterVisible(),
+                    () -> {
+                        mod.getHudLayoutManager().setMasterVisible(!mod.getHudLayoutManager().isMasterVisible());
+                        mod.persistHudLayout();
+                    }));
+            rows.add(hudVisibleToggle("EMC Stats card visible", "emcstats"));
+            rows.add(hudAdvancedToggle("Advanced stats", "emcstats"));
+            rows.add(new SettingRow.Button("EMC Stats rows", () -> setPage(Page.SETTINGS_ROWS)));
+        }
+        rows.add(new SettingRow.Button("Reset statistics", () -> {
+            EmcStatsScoreboard sb = mod.getEmcStatsScoreboard();
+            if (sb != null) sb.resetSession(EmcStatsScoreboard.GameMode.valueOf(mode.name()));
+        }));
+    }
+
+    private void buildSettingsRows() {
         EmcStatsScoreboard sb = mod.getEmcStatsScoreboard();
         for (EmcStatsScoreboard.HudStat stat : EmcStatsScoreboard.HudStat.values()) {
             EmcStatsScoreboard.HudStat hudStat = stat;
@@ -369,19 +390,25 @@ public class ClickGuiScreen extends Screen {
         d.text(MOD_VERSION, textX, textY + 11, GuiTheme.MUTED);
 
         int y = logoY + LOGO_SIZE + 16;
+        d.text("HOME", winX + 16, y, GuiTheme.MUTED);
+        y += 14;
+        navModulesY = y;
+        y = navItem(d, y, GuiDraw.Icon.BOX, "Modules", Page.MODULES, mouseX, mouseY);
+        y += 8;
         d.text("CONFIGURATION", winX + 16, y, GuiTheme.MUTED);
         y += 14;
         navSettingsY = y;
         y = navItem(d, y, GuiDraw.Icon.GEAR, "Settings", Page.SETTINGS, mouseX, mouseY);
         navConfigY = y;
-        y = navItem(d, y, null, "Config", Page.CONFIG, mouseX, mouseY);
-        navHudY = y;
-        navItem(d, y, null, "HUD", Page.HUD, mouseX, mouseY);
+        navItem(d, y, GuiDraw.Icon.PATH, "Config", Page.CONFIG, mouseX, mouseY);
     }
 
     private boolean sidebarSelected(Page target) {
-        if (target == Page.HUD) {
-            return page == Page.HUD || page == Page.HUD_ROWS;
+        if (target == Page.MODULES) {
+            return page == Page.MODULES || page == Page.MODULE || page == Page.SETTINGS_ROWS;
+        }
+        if (target == Page.SETTINGS) {
+            return page == Page.SETTINGS;
         }
         return page == target;
     }
@@ -438,24 +465,30 @@ public class ClickGuiScreen extends Screen {
     }
 
     private boolean isDrillIn() {
-        return page == Page.HUD_ROWS;
+        return page == Page.SETTINGS_ROWS || page == Page.MODULE;
+    }
+
+    private Page backPage() {
+        return page == Page.SETTINGS_ROWS ? Page.MODULE : Page.MODULES;
     }
 
     private String headerTitle() {
         return switch (page) {
+            case MODULES -> "Modules";
             case SETTINGS -> "Settings";
             case CONFIG -> "Config";
-            case HUD -> "HUD";
-            case HUD_ROWS -> "EMC Stats rows";
+            case SETTINGS_ROWS -> "EMC Stats rows";
+            case MODULE -> selectedMode == null ? "Modules" : selectedMode.title;
         };
     }
 
     private String headerSubtitle() {
         return switch (page) {
-            case SETTINGS -> "Appearance and keybind";
+            case MODULES -> "Manage modules";
+            case SETTINGS -> "Appearance, keybind, and HUD";
             case CONFIG -> "Profiles and sharing";
-            case HUD -> "Stat card layout";
-            case HUD_ROWS -> "Show or hide card lines";
+            case SETTINGS_ROWS -> "Show or hide card lines";
+            case MODULE -> selectedMode != null && selectedMode.comingSoon() ? "Coming Soon!" : "Settings";
         };
     }
 
@@ -498,15 +531,15 @@ public class ClickGuiScreen extends Screen {
         mouseY = GuiScale.mouseY(mouseY, height);
         if (button != 0) return super.mouseClicked(mouseX, mouseY, button);
 
+        if (clickNav(mouseX, mouseY, navModulesY, Page.MODULES)) return true;
         if (clickNav(mouseX, mouseY, navSettingsY, Page.SETTINGS)) return true;
         if (clickNav(mouseX, mouseY, navConfigY, Page.CONFIG)) return true;
-        if (clickNav(mouseX, mouseY, navHudY, Page.HUD)) return true;
 
         if (isDrillIn()) {
             int backX = contentX;
             int backY = winY + 12;
             if (GuiTheme.hit(backX, backY, 52, 22, mouseX, mouseY)) {
-                setPage(Page.HUD);
+                setPage(backPage());
                 return true;
             }
         }

@@ -6,13 +6,17 @@ import net.minecraft.world.scores.DisplaySlot;
 import net.minecraft.world.scores.PlayerScoreEntry;
 import net.minecraft.world.scores.Objective;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Single-pass reader for the EMC sidebar. Position is preferred over label keywords.
+ * Location is classified after small-caps normalization so Hub player counts are not
+ * ingested as dungeon currencies.
  */
 public final class EmcSidebar {
+    public enum Location { HUB, DUNGEONS, UNKNOWN }
     private static final int SCORE_CREDITS = 3;
     private static final int SCORE_SHARDS = 4;
     private static final int SCORE_ESSENCE = 5;
@@ -43,14 +47,19 @@ public final class EmcSidebar {
         boolean hasMoneyKw = false, hasSoulsKw = false, hasEssenceKw = false, hasShardsKw = false;
         boolean hasCreditsKw = false, hasSwingsKw = false, hasRebirthKw = false;
 
+        boolean hub = false;
+        boolean dungeonKw = false;
+
         for (PlayerScoreEntry entry : scoreboard.listPlayerScores(objective)) {
             String ownerName = entry.owner();
             String text = reconstructLine(scoreboard, ownerName);
             String stripped = text.replaceAll("§.", "");
             String normalized = normalizeSmallCaps(stripped);
+            String lower = normalized.toLowerCase(Locale.ROOT);
+            if (isHubLine(lower)) hub = true;
+            if (hasDungeonCurrencyKeyword(lower)) dungeonKw = true;
             if (!containsDigit(normalized)) continue;
 
-            String lower = normalized.toLowerCase();
             int score = entry.value();
             boolean assignedByPosition = true;
 
@@ -139,8 +148,27 @@ public final class EmcSidebar {
                 hasShardsPos || hasShardsKw,
                 hasCreditsPos || hasCreditsKw,
                 hasSwingsPos || hasSwingsKw,
-                hasRebirthPos || hasRebirthKw
+                hasRebirthPos || hasRebirthKw,
+                classifyLocation(hub, dungeonKw)
         );
+    }
+
+    static boolean isHubLine(String lower) {
+        if (lower == null) return false;
+        if (lower.contains("lobby server")) return true;
+        return lower.contains("server:") && lower.contains("hub");
+    }
+
+    static boolean hasDungeonCurrencyKeyword(String lower) {
+        if (lower == null) return false;
+        return lower.contains("souls") || lower.contains("essence") || lower.contains("shards")
+                || lower.contains("swings") || lower.contains("rebirth");
+    }
+
+    static Location classifyLocation(boolean hub, boolean dungeonKw) {
+        if (hub) return Location.HUB;
+        if (dungeonKw) return Location.DUNGEONS;
+        return Location.UNKNOWN;
     }
 
     public static String normalizeSmallCaps(String text) {
@@ -280,12 +308,14 @@ public final class EmcSidebar {
         public final boolean hasCredits;
         public final boolean hasSwings;
         public final boolean hasRebirth;
+        public final Location location;
 
         private Snapshot(
                 double money, double souls, double essence, double shards, double credits, double swings,
                 int rebirthLevel,
                 boolean hasMoney, boolean hasSouls, boolean hasEssence, boolean hasShards,
-                boolean hasCredits, boolean hasSwings, boolean hasRebirth
+                boolean hasCredits, boolean hasSwings, boolean hasRebirth,
+                Location location
         ) {
             this.money = money;
             this.souls = souls;
@@ -301,10 +331,11 @@ public final class EmcSidebar {
             this.hasCredits = hasCredits;
             this.hasSwings = hasSwings;
             this.hasRebirth = hasRebirth;
+            this.location = location == null ? Location.UNKNOWN : location;
         }
 
         public static Snapshot empty() {
-            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false);
+            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false, Location.UNKNOWN);
         }
     }
 }

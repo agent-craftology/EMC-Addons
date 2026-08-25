@@ -26,7 +26,8 @@ public final class EmcStatsScoreboard implements StatCardSource {
         MONEY("Money", "money"),
         SWINGS("Swings", "swings"),
         REBIRTH("Rebirth", "rebirth"),
-        GRAPH("Graph", "graph");
+        GRAPH("Graph", "graph"),
+        GRIND_TIME("Grind Time", "grind_time");
 
         public final String label;
         public final String key;
@@ -54,8 +55,13 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private final SessionEarnedTracker shardsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker creditsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker swingsEarned = new SessionEarnedTracker();
+    private final EnumMap<GameMode, SessionEarnedTracker> modeBuckets = new EnumMap<>(GameMode.class);
+    private GameMode lastMode = GameMode.DUNGEONS;
     private int lastWorldIdentity;
-    private long sessionStartMs;
+    private long grindAccumulatedMs;
+    private long grindSegmentStartMs;
+    private boolean grindRunning;
+    private String grindTimeText = "0s";
 
     private String soulsPerHourText = "--";
     private String essencePerHourText = "--";
@@ -82,6 +88,24 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     public EmcStatsScoreboard() {
         for (HudStat stat : HudStat.values()) hudStatVisible.put(stat, true);
+        for (GameMode mode : GameMode.values()) {
+            if (mode != GameMode.DUNGEONS) modeBuckets.put(mode, new SessionEarnedTracker());
+        }
+    }
+
+    public void resetSession() {
+        resetEarnedTrackers();
+        clearSparkline();
+        resetGrindTime();
+    }
+
+    public void resetMode(GameMode mode) {
+        if (mode == null || mode == GameMode.DUNGEONS) {
+            resetSession();
+            return;
+        }
+        SessionEarnedTracker bucket = modeBuckets.get(mode);
+        if (bucket != null) bucket.reset();
     }
 
     public boolean isHudStatVisible(HudStat stat) {
@@ -128,11 +152,21 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     public void update(MinecraftClient client) {
-        EmcSidebar.Snapshot snap = EmcSidebar.read(client);
-        ingestBalances(client, snap);
-        if (snap != null && snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
+        lastWorldIdentity = worldIdentity(client);
+        boolean inWorld = lastWorldIdentity != 0;
+        EmcSidebar.Snapshot snap = inWorld ? EmcSidebar.read(client) : EmcSidebar.Snapshot.empty();
+        if (snap == null) snap = EmcSidebar.Snapshot.empty();
+        boolean grinding = inWorld && snap.location == EmcSidebar.Location.DUNGEONS;
+        if (grinding) lastMode = GameMode.DUNGEONS;
 
-        long elapsedMs = sessionStartMs > 0 ? System.currentTimeMillis() - sessionStartMs : 0;
+        setGrinding(grinding);
+        if (grinding) {
+            ingestBalances(snap);
+            if (snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
+        }
+
+        long elapsedMs = grindElapsedMs();
+        grindTimeText = formatGrindTime(elapsedMs);
         double sessionMoney = moneyEarned.earned();
         double sessionSoulsMade = soulsEarned.earned();
         double sessionEssenceMade = essenceEarned.earned();
@@ -166,7 +200,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
             swingsPerHourText = "--";
         }
 
-        if (worldIdentity(client) != 0) {
+        if (grinding) {
             long nowMs = System.currentTimeMillis();
             if (lastSparklineSampleMs == 0 || nowMs - lastSparklineSampleMs >= SPARKLINE_INTERVAL_MS) {
                 lastSparklineSampleMs = nowMs;
@@ -182,7 +216,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     @Override
     public String title() {
-        return "EMC Stats";
+        return lastMode.displayName + " Stats";
     }
 
     @Override
@@ -272,16 +306,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
             rows.add(new StatRow("Session money", sessionMoneyText));
             rows.add(new StatRow("Total money", totalMoneyText));
         }
+        addIf(rows, HudStat.GRIND_TIME, new StatRow("Grind Time", grindTimeText));
     }
 
     private void addIf(List<StatRow> rows, HudStat stat, StatRow row) {
         if (isHudStatVisible(stat)) rows.add(row);
     }
 
-    private void ingestBalances(MinecraftClient client, EmcSidebar.Snapshot snap) {
-        syncWorld(client);
-        if (lastWorldIdentity == 0) return;
-        if (snap == null) snap = EmcSidebar.Snapshot.empty();
+    private void ingestBalances(EmcSidebar.Snapshot snap) {
         if (snap.hasMoney) {
             currentMoney = snap.money;
             moneyEarned.observeBalance(snap.money);
@@ -308,24 +340,43 @@ public final class EmcStatsScoreboard implements StatCardSource {
         }
     }
 
-    private void syncWorld(MinecraftClient client) {
-        int id = worldIdentity(client);
-        if (id == lastWorldIdentity) return;
-        if (lastWorldIdentity != 0) {
-            resetEarnedTrackers();
-            clearSparkline();
+    private void setGrinding(boolean grinding) {
+        long now = System.currentTimeMillis();
+        if (grinding) {
+            if (!grindRunning) {
+                grindRunning = true;
+                grindSegmentStartMs = now;
+            }
+        } else if (grindRunning) {
+            grindAccumulatedMs += Math.max(0L, now - grindSegmentStartMs);
+            grindRunning = false;
+            grindSegmentStartMs = 0L;
         }
-        lastWorldIdentity = id;
-        sessionStartMs = id == 0 ? 0 : System.currentTimeMillis();
-        if (id != 0) {
-            currentMoney = 0;
-            currentSouls = 0;
-            currentEssence = 0;
-            currentShards = 0;
-            currentCredits = 0;
-            currentSwings = 0;
-            rebirthLevel = -1;
+    }
+
+    private long grindElapsedMs() {
+        long elapsed = grindAccumulatedMs;
+        if (grindRunning && grindSegmentStartMs > 0L) {
+            elapsed += Math.max(0L, System.currentTimeMillis() - grindSegmentStartMs);
         }
+        return elapsed;
+    }
+
+    private void resetGrindTime() {
+        grindAccumulatedMs = 0L;
+        grindSegmentStartMs = 0L;
+        grindRunning = false;
+        grindTimeText = "0s";
+    }
+
+    static String formatGrindTime(long ms) {
+        long totalSec = Math.max(0L, ms / 1000L);
+        long h = totalSec / 3600L;
+        long m = (totalSec % 3600L) / 60L;
+        long s = totalSec % 60L;
+        if (h > 0) return String.format("%dh %02dm %02ds", h, m, s);
+        if (m > 0) return String.format("%dm %02ds", m, s);
+        return s + "s";
     }
 
     private static int worldIdentity(MinecraftClient client) {

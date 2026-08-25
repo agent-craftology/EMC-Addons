@@ -6,6 +6,7 @@ import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardEntry;
 import net.minecraft.scoreboard.ScoreboardObjective;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -26,6 +27,8 @@ public final class EmcSidebar {
 
     private EmcSidebar() {}
 
+    public enum Location { HUB, DUNGEONS, UNKNOWN }
+
     public static Snapshot read(MinecraftClient client) {
         if (client == null || client.world == null) return Snapshot.empty();
 
@@ -42,15 +45,19 @@ public final class EmcSidebar {
         int rebirthKw = -1;
         boolean hasMoneyKw = false, hasSoulsKw = false, hasEssenceKw = false, hasShardsKw = false;
         boolean hasCreditsKw = false, hasSwingsKw = false, hasRebirthKw = false;
+        boolean hub = false;
+        boolean dungeonKw = false;
 
         for (ScoreboardEntry entry : scoreboard.getScoreboardEntries(objective)) {
             String ownerName = entry.owner();
             String text = reconstructLine(scoreboard, ownerName);
             String stripped = text.replaceAll("§.", "");
             String normalized = normalizeSmallCaps(stripped);
+            String lower = normalized.toLowerCase(Locale.ROOT);
+            if (isHubLine(lower)) hub = true;
+            if (isDungeonKeywordLine(lower)) dungeonKw = true;
             if (!containsDigit(normalized)) continue;
 
-            String lower = normalized.toLowerCase();
             int score = entry.value();
             boolean assignedByPosition = true;
 
@@ -125,6 +132,7 @@ public final class EmcSidebar {
             }
         }
 
+        Location location = hub ? Location.HUB : (dungeonKw ? Location.DUNGEONS : Location.UNKNOWN);
         return new Snapshot(
                 hasMoneyPos ? moneyPos : moneyKw,
                 hasSoulsPos ? soulsPos : soulsKw,
@@ -139,8 +147,22 @@ public final class EmcSidebar {
                 hasShardsPos || hasShardsKw,
                 hasCreditsPos || hasCreditsKw,
                 hasSwingsPos || hasSwingsKw,
-                hasRebirthPos || hasRebirthKw
+                hasRebirthPos || hasRebirthKw,
+                location
         );
+    }
+
+    private static boolean isHubLine(String lower) {
+        if (lower == null || lower.isEmpty()) return false;
+        if (lower.contains("lobby server")) return true;
+        return lower.contains("server:") && lower.contains("hub");
+    }
+
+    private static boolean isDungeonKeywordLine(String lower) {
+        if (lower == null || lower.isEmpty()) return false;
+        if (lower.contains("souls") || lower.contains("essence") || lower.contains("shards")) return true;
+        if (lower.contains("rebirth")) return true;
+        return lower.contains("swings") && !lower.contains("swing rate");
     }
 
     public static String normalizeSmallCaps(String text) {
@@ -280,12 +302,14 @@ public final class EmcSidebar {
         public final boolean hasCredits;
         public final boolean hasSwings;
         public final boolean hasRebirth;
+        public final Location location;
 
         private Snapshot(
                 double money, double souls, double essence, double shards, double credits, double swings,
                 int rebirthLevel,
                 boolean hasMoney, boolean hasSouls, boolean hasEssence, boolean hasShards,
-                boolean hasCredits, boolean hasSwings, boolean hasRebirth
+                boolean hasCredits, boolean hasSwings, boolean hasRebirth,
+                Location location
         ) {
             this.money = money;
             this.souls = souls;
@@ -301,10 +325,11 @@ public final class EmcSidebar {
             this.hasCredits = hasCredits;
             this.hasSwings = hasSwings;
             this.hasRebirth = hasRebirth;
+            this.location = location == null ? Location.UNKNOWN : location;
         }
 
         public static Snapshot empty() {
-            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false);
+            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false, Location.UNKNOWN);
         }
     }
 }

@@ -9,6 +9,7 @@ import com.emcaddons.gui.clickgui.widget.HeadingRow;
 import com.emcaddons.gui.clickgui.widget.KeybindRow;
 import com.emcaddons.gui.clickgui.widget.LabelRow;
 import com.emcaddons.gui.clickgui.widget.ModeRow;
+import com.emcaddons.gui.clickgui.widget.ModuleGridRow;
 import com.emcaddons.gui.clickgui.widget.ProfileListWidget;
 import com.emcaddons.gui.clickgui.widget.SettingRow;
 import com.emcaddons.gui.clickgui.widget.SliderRow;
@@ -26,7 +27,7 @@ import java.util.function.Supplier;
 final class ClickGuiPages {
     private ClickGuiPages() {}
 
-    static List<SettingRow> settings(EmcAddonsClient mod) {
+    static List<SettingRow> settings(EmcAddonsClient mod, ClickGuiScreen gui) {
         List<SettingRow> rows = new ArrayList<>();
         rows.add(new HeadingRow("APPEARANCE"));
         rows.add(new ModeRow("Theme", GuiTheme.Theme.displayNames(),
@@ -39,7 +40,74 @@ final class ClickGuiPages {
         rows.add(new ToggleRow("Window icon", mod::isWindowIconEnabled, mod::setWindowIconEnabled));
         rows.add(new HeadingRow("KEYBINDS"));
         rows.add(new KeybindRow("Open menu", mod::getGuiOpenMenuKey, mod::setGuiOpenMenuKey, false));
+        rows.add(new HeadingRow("HUD"));
+        rows.add(new ButtonRow("HUD layout", () -> "Edit layout...",
+                () -> MinecraftClient.getInstance().setScreen(
+                        new HudEditScreen(mod.getHudLayoutManager(), mod::persistHudLayout)),
+                () -> true, null));
+        rows.add(new ButtonRow("Reset", () -> "Reset positions",
+                () -> {
+                    mod.getHudLayoutManager().resetPositions();
+                    mod.persistHudLayout();
+                }, () -> true, null));
         return rows;
+    }
+
+    static List<SettingRow> modules(ClickGuiScreen gui) {
+        List<SettingRow> rows = new ArrayList<>();
+        rows.add(new ModuleGridRow(List.of(
+                new ModuleGridRow.Card("Dungeons", "Track dungeon currencies, rates, and grind time",
+                        () -> gui.openModule(ClickGuiScreen.Module.DUNGEONS)),
+                new ModuleGridRow.Card("Gens", "Coming Soon!",
+                        () -> gui.openModule(ClickGuiScreen.Module.GENS)),
+                new ModuleGridRow.Card("Factories", "Coming Soon!",
+                        () -> gui.openModule(ClickGuiScreen.Module.FACTORIES)),
+                new ModuleGridRow.Card("Skyblock", "Coming Soon!",
+                        () -> gui.openModule(ClickGuiScreen.Module.SKYBLOCK)),
+                new ModuleGridRow.Card("Prisons", "Coming Soon!",
+                        () -> gui.openModule(ClickGuiScreen.Module.PRISONS))
+        )));
+        return rows;
+    }
+
+    static List<SettingRow> module(EmcAddonsClient mod, ClickGuiScreen gui, ClickGuiScreen.Module module) {
+        List<SettingRow> rows = new ArrayList<>();
+        ClickGuiScreen.Module id = module != null ? module : ClickGuiScreen.Module.DUNGEONS;
+        if (!id.comingSoon) {
+            rows.add(new HeadingRow("DUNGEONS"));
+            addDungeonHudRows(rows, mod, gui);
+            rows.add(new ButtonRow("Reset statistics", "Reset",
+                    () -> mod.getEmcStatsScoreboard().resetSession()));
+            return rows;
+        }
+        rows.add(new LabelRow("Status", () -> "Coming Soon!"));
+        rows.add(new ButtonRow("Reset statistics", "Reset",
+                () -> mod.getEmcStatsScoreboard().resetGamemode(id.name())));
+        return rows;
+    }
+
+    private static void addDungeonHudRows(List<SettingRow> rows, EmcAddonsClient mod, ClickGuiScreen gui) {
+        rows.add(new ToggleRow("Show HUD", () -> mod.getHudLayoutManager().isMasterVisible(), v -> {
+            mod.getHudLayoutManager().setMasterVisible(v);
+            mod.persistHudLayout();
+        }));
+        rows.add(new ToggleRow("EMC Stats card visible", () -> {
+            var c = mod.getHudLayoutManager().get("emcstats");
+            return c != null && c.isVisible();
+        }, v -> {
+            var c = mod.getHudLayoutManager().get("emcstats");
+            if (c != null) c.setVisible(v);
+            mod.persistHudLayout();
+        }));
+        rows.add(new ToggleRow("Advanced stats", () -> {
+            var c = mod.getHudLayoutManager().get("emcstats");
+            return c != null && c.isAdvanced();
+        }, v -> {
+            var c = mod.getHudLayoutManager().get("emcstats");
+            if (c != null) c.setAdvanced(v);
+            mod.persistHudLayout();
+        }));
+        rows.add(new ButtonRow("EMC Stats rows", "Open...", () -> gui.openPage(ClickGuiScreen.Page.SETTINGS_ROWS)));
     }
 
     static List<SettingRow> config(EmcAddonsClient mod, ClickGuiScreen gui, Supplier<String> search) {
@@ -91,42 +159,7 @@ final class ClickGuiPages {
         return rows;
     }
 
-    static List<SettingRow> hud(EmcAddonsClient mod, ClickGuiScreen gui) {
-        List<SettingRow> rows = new ArrayList<>();
-        rows.add(new ToggleRow("Show HUD", () -> mod.getHudLayoutManager().isMasterVisible(), v -> {
-            mod.getHudLayoutManager().setMasterVisible(v);
-            mod.persistHudLayout();
-        }));
-        rows.add(new ToggleRow("EMC Stats card visible", () -> {
-            var c = mod.getHudLayoutManager().get("emcstats");
-            return c != null && c.isVisible();
-        }, v -> {
-            var c = mod.getHudLayoutManager().get("emcstats");
-            if (c != null) c.setVisible(v);
-            mod.persistHudLayout();
-        }));
-        rows.add(new ToggleRow("Advanced stats", () -> {
-            var c = mod.getHudLayoutManager().get("emcstats");
-            return c != null && c.isAdvanced();
-        }, v -> {
-            var c = mod.getHudLayoutManager().get("emcstats");
-            if (c != null) c.setAdvanced(v);
-            mod.persistHudLayout();
-        }));
-        rows.add(new ButtonRow("EMC Stats rows", "Open...", () -> gui.openPage(ClickGuiScreen.Page.HUD_ROWS)));
-        rows.add(new ButtonRow("HUD layout", () -> "Edit layout...",
-                () -> MinecraftClient.getInstance().setScreen(
-                        new HudEditScreen(mod.getHudLayoutManager(), mod::persistHudLayout)),
-                () -> true, null));
-        rows.add(new ButtonRow("Reset", () -> "Reset positions",
-                () -> {
-                    mod.getHudLayoutManager().resetPositions();
-                    mod.persistHudLayout();
-                }, () -> true, null));
-        return rows;
-    }
-
-    static List<SettingRow> hudRows(EmcAddonsClient mod) {
+    static List<SettingRow> settingsRows(EmcAddonsClient mod) {
         List<SettingRow> rows = new ArrayList<>();
         EmcStatsScoreboard sb = mod.getEmcStatsScoreboard();
         for (EmcStatsScoreboard.HudStat stat : EmcStatsScoreboard.HudStat.values()) {

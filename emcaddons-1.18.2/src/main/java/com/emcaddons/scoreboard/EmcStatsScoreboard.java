@@ -25,7 +25,8 @@ public final class EmcStatsScoreboard implements StatCardSource {
         MONEY("Money", "money"),
         SWINGS("Swings", "swings"),
         REBIRTH("Rebirth", "rebirth"),
-        GRAPH("Graph", "graph");
+        GRAPH("Graph", "graph"),
+        GRIND_TIME("Grind Time", "grind_time");
 
         public final String label;
         public final String key;
@@ -33,6 +34,20 @@ public final class EmcStatsScoreboard implements StatCardSource {
         HudStat(String label, String key) {
             this.label = label;
             this.key = key;
+        }
+    }
+
+    public enum GameMode {
+        DUNGEONS("Dungeons"),
+        GENS("Gens"),
+        FACTORIES("Factories"),
+        SKYBLOCK("Skyblock"),
+        PRISONS("Prisons");
+
+        public final String displayName;
+
+        GameMode(String displayName) {
+            this.displayName = displayName;
         }
     }
 
@@ -76,9 +91,17 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private double cachedSessionSwings;
     private double cachedSwingsPerHour;
     private long cachedActiveMs;
+    private long grindAccumulatedMs;
+    private long grindResumeMs;
+    private boolean grindRunning;
+    private final EnumMap<GameMode, ModeBucket> modeBuckets = new EnumMap<>(GameMode.class);
+    private GameMode lastMode = GameMode.DUNGEONS;
 
     public EmcStatsScoreboard() {
         for (HudStat stat : HudStat.values()) hudStatVisible.put(stat, true);
+        for (GameMode mode : GameMode.values()) {
+            if (mode != GameMode.DUNGEONS) modeBuckets.put(mode, new ModeBucket());
+        }
     }
 
     public boolean isHudStatVisible(HudStat stat) {
@@ -158,44 +181,71 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     public void update(MinecraftClient client) {
-        if (client == null || client.world == null) return;
+        if (client == null || client.world == null) {
+            pauseGrind();
+            refreshCachedRates();
+            return;
+        }
         if (!sessionActive) startSession(client);
 
         EmcSidebar.Snapshot snap = EmcSidebar.read(client);
+        boolean counting = snap != null && snap.countsStats();
+        if (!counting) {
+            pauseGrind();
+            refreshCachedRates();
+            return;
+        }
+        lastMode = GameMode.DUNGEONS;
+        resumeGrind();
         ingestBalances(client, snap);
-        if (snap != null && snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
+        if (snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
+        refreshCachedRates();
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastSparklineSampleMs >= SPARKLINE_INTERVAL_MS) {
+            pushSparklineSample(graphMade());
+            lastSparklineSampleMs = nowMs;
+        }
+    }
 
-        long elapsedMs = sessionActive ? System.currentTimeMillis() - sessionStartMs : 0;
-        cachedSessionMoney = moneyEarned.earned();
-        cachedSessionSouls = soulsEarned.earned();
-        cachedSessionEssence = essenceEarned.earned();
-        cachedSessionShards = shardsEarned.earned();
-        cachedSessionCredits = creditsEarned.earned();
-        cachedSessionSwings = swingsEarned.earned();
-        cachedActiveMs = Math.max(0L, elapsedMs);
-        double activeHours = cachedActiveMs / 3_600_000.0;
-        if (cachedActiveMs >= RATE_WARMUP_MS) {
-            cachedMoneyPerHour = cachedSessionMoney / activeHours;
-            cachedSoulsPerHour = cachedSessionSouls / activeHours;
-            cachedEssencePerHour = cachedSessionEssence / activeHours;
-            cachedShardsPerHour = cachedSessionShards / activeHours;
-            cachedCreditsPerHour = cachedSessionCredits / activeHours;
-            cachedSwingsPerHour = cachedSessionSwings / activeHours;
-        } else {
-            cachedMoneyPerHour = 0.0;
-            cachedSoulsPerHour = 0.0;
-            cachedEssencePerHour = 0.0;
-            cachedShardsPerHour = 0.0;
-            cachedCreditsPerHour = 0.0;
-            cachedSwingsPerHour = 0.0;
+    /**
+     * Clears dungeon session earned, rates, sparkline, and grind time.
+     * Does not run automatically on world/server changes.
+     */
+    public void resetSession() {
+        resetSession(GameMode.DUNGEONS);
+    }
+
+    public void resetSession(GameMode mode) {
+        if (mode == null) return;
+        if (mode != GameMode.DUNGEONS) {
+            ModeBucket bucket = modeBuckets.get(mode);
+            if (bucket != null) bucket.reset();
+            return;
         }
-        if (sessionActive) {
-            long nowMs = System.currentTimeMillis();
-            if (nowMs - lastSparklineSampleMs >= SPARKLINE_INTERVAL_MS) {
-                pushSparklineSample(graphMade());
-                lastSparklineSampleMs = nowMs;
-            }
+        resetEarnedTrackers();
+        clearSparkline();
+        grindAccumulatedMs = 0L;
+        grindResumeMs = grindRunning ? System.currentTimeMillis() : 0L;
+        cachedActiveMs = 0L;
+        refreshCachedRates();
+    }
+
+    public static String formatGrindTime(long elapsedMs) {
+        long totalSec = Math.max(0L, elapsedMs / 1000L);
+        long hours = totalSec / 3600L;
+        long minutes = (totalSec % 3600L) / 60L;
+        long seconds = totalSec % 60L;
+        if (hours > 0) {
+            return hours + "h " + pad2(minutes) + "m " + pad2(seconds) + "s";
         }
+        if (minutes > 0) {
+            return minutes + "m " + pad2(seconds) + "s";
+        }
+        return seconds + "s";
+    }
+
+    private static String pad2(long value) {
+        return value < 10 ? "0" + value : Long.toString(value);
     }
 
     private void startSession(MinecraftClient client) {
@@ -203,12 +253,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
         sessionActive = true;
         resetEarnedTrackers();
         lastWorldIdentity = worldIdentity(client);
-        ingestBalances(client, EmcSidebar.read(client));
         clearSparkline();
+        grindAccumulatedMs = 0L;
+        grindResumeMs = 0L;
+        grindRunning = false;
     }
 
     private void ingestBalances(MinecraftClient client, EmcSidebar.Snapshot snap) {
-        syncWorld(client);
+        lastWorldIdentity = worldIdentity(client);
         if (snap == null) snap = EmcSidebar.Snapshot.empty();
         if (snap.hasMoney) {
             currentMoney = snap.money;
@@ -236,14 +288,49 @@ public final class EmcStatsScoreboard implements StatCardSource {
         }
     }
 
-    private void syncWorld(MinecraftClient client) {
-        int id = worldIdentity(client);
-        if (id == lastWorldIdentity) return;
-        if (sessionActive && lastWorldIdentity != 0) {
-            resetEarnedTrackers();
-            clearSparkline();
+    private void refreshCachedRates() {
+        cachedSessionMoney = moneyEarned.earned();
+        cachedSessionSouls = soulsEarned.earned();
+        cachedSessionEssence = essenceEarned.earned();
+        cachedSessionShards = shardsEarned.earned();
+        cachedSessionCredits = creditsEarned.earned();
+        cachedSessionSwings = swingsEarned.earned();
+        cachedActiveMs = grindElapsedMs();
+        double activeHours = cachedActiveMs / 3_600_000.0;
+        if (cachedActiveMs >= RATE_WARMUP_MS && activeHours > 0) {
+            cachedMoneyPerHour = cachedSessionMoney / activeHours;
+            cachedSoulsPerHour = cachedSessionSouls / activeHours;
+            cachedEssencePerHour = cachedSessionEssence / activeHours;
+            cachedShardsPerHour = cachedSessionShards / activeHours;
+            cachedCreditsPerHour = cachedSessionCredits / activeHours;
+            cachedSwingsPerHour = cachedSessionSwings / activeHours;
+        } else {
+            cachedMoneyPerHour = 0.0;
+            cachedSoulsPerHour = 0.0;
+            cachedEssencePerHour = 0.0;
+            cachedShardsPerHour = 0.0;
+            cachedCreditsPerHour = 0.0;
+            cachedSwingsPerHour = 0.0;
         }
-        lastWorldIdentity = id;
+    }
+
+    private void resumeGrind() {
+        if (grindRunning) return;
+        grindResumeMs = System.currentTimeMillis();
+        grindRunning = true;
+    }
+
+    private void pauseGrind() {
+        if (!grindRunning) return;
+        grindAccumulatedMs += Math.max(0L, System.currentTimeMillis() - grindResumeMs);
+        grindRunning = false;
+        grindResumeMs = 0L;
+    }
+
+    private long grindElapsedMs() {
+        long total = grindAccumulatedMs;
+        if (grindRunning) total += Math.max(0L, System.currentTimeMillis() - grindResumeMs);
+        return total;
     }
 
     private static int worldIdentity(MinecraftClient client) {
@@ -291,7 +378,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     @Override
     public String title() {
-        return "EMC STATS";
+        return lastMode.displayName + " Stats";
     }
 
     @Override
@@ -336,6 +423,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void appendCurrencyRows(List<StatRow> rows) {
+        addIf(rows, HudStat.GRIND_TIME, new StatRow("Grind Time", formatGrindTime(cachedActiveMs)));
         if (isHudStatVisible(HudStat.SOULS)) {
             rows.add(new StatRow("Souls/hr", formatRate(cachedSoulsPerHour, cachedActiveMs)));
             rows.add(new StatRow("Session souls", formatMoney(cachedSessionSouls)));
@@ -388,5 +476,10 @@ public final class EmcStatsScoreboard implements StatCardSource {
         sparklineCount = 0;
         sparklineHead = 0;
         lastSparklineSampleMs = 0;
+    }
+
+    /** Placeholder until Gens / Factories / Skyblock / Prisons have their own stats. */
+    private static final class ModeBucket {
+        void reset() {}
     }
 }

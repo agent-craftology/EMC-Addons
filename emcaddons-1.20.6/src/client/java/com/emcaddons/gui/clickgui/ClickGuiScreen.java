@@ -18,7 +18,23 @@ import java.util.List;
 
 public class ClickGuiScreen extends Screen {
     public enum Page {
-        SETTINGS, CONFIG, HUD, HUD_ROWS
+        MODULES, SETTINGS, CONFIG, SETTINGS_ROWS, MODULE
+    }
+
+    public enum Module {
+        DUNGEONS("Dungeons", false),
+        GENS("Gens", true),
+        FACTORIES("Factories", true),
+        SKYBLOCK("Skyblock", true),
+        PRISONS("Prisons", true);
+
+        public final String title;
+        public final boolean comingSoon;
+
+        Module(String title, boolean comingSoon) {
+            this.title = title;
+            this.comingSoon = comingSoon;
+        }
     }
 
     private static final Identifier LOGO = new Identifier("emcaddons", "textures/gui/logo.png");
@@ -27,12 +43,13 @@ public class ClickGuiScreen extends Screen {
 
     private final EmcAddonsClient mod;
     private final NavHit[] navHits = {
+            new NavHit("modules", "Modules", GuiDraw.Icon.BOX, Page.MODULES, true),
             new NavHit("settings", "Settings", GuiDraw.Icon.GEAR, Page.SETTINGS, false),
-            new NavHit("config", "Config", GuiDraw.Icon.BOX, Page.CONFIG, false),
-            new NavHit("hud", "HUD", GuiDraw.Icon.MARK, Page.HUD, false)
+            new NavHit("config", "Config", GuiDraw.Icon.PATH, Page.CONFIG, false)
     };
 
-    private Page page = Page.SETTINGS;
+    private Page page = Page.MODULES;
+    private Module module = Module.DUNGEONS;
     private int winX, winY, winW, winH;
     private int contentX, contentY, contentW, contentH;
     private int backX, backY, backW;
@@ -109,10 +126,11 @@ public class ClickGuiScreen extends Screen {
         contentScrollTarget = 0;
         scrollAnim.snapTo(0f);
         switch (page) {
-            case SETTINGS -> rows.addAll(ClickGuiPages.settings(mod));
+            case MODULES -> rows.addAll(ClickGuiPages.modules(this));
+            case SETTINGS -> rows.addAll(ClickGuiPages.settings(mod, this));
             case CONFIG -> rows.addAll(ClickGuiPages.config(mod, this, () -> searchQuery));
-            case HUD -> rows.addAll(ClickGuiPages.hud(mod, this));
-            case HUD_ROWS -> rows.addAll(ClickGuiPages.hudRows(mod));
+            case SETTINGS_ROWS -> rows.addAll(ClickGuiPages.settingsRows(mod));
+            case MODULE -> rows.addAll(ClickGuiPages.module(mod, this, module));
         }
         layoutRows();
     }
@@ -122,23 +140,29 @@ public class ClickGuiScreen extends Screen {
     }
 
     private void layoutRows() {
-        int inner = contentW;
-        int y = 0;
+        int pad = GuiTheme.PAD;
+        int inner = contentW - pad * 2;
+        int y = pad;
         int scroll = currentScroll();
         for (int i = 0; i < rows.size(); i++) {
             SettingRow row = rows.get(i);
             if (row instanceof ProfileListWidget list && i == rows.size() - 1) {
                 int used = y;
-                list.setFillHeight(Math.max(160, contentH - used - 4));
+                list.setFillHeight(Math.max(160, contentH - used - pad));
             }
-            row.setPosition(contentX, contentY + y - scroll, inner);
+            row.setPosition(contentX + pad, contentY + y - scroll, inner);
             y += row.getHeight() + 6;
         }
-        contentHeight = y;
+        contentHeight = y + pad;
     }
 
     void openPage(Page next) {
         navigate(next);
+    }
+
+    void openModule(Module next) {
+        this.module = next != null ? next : Module.DUNGEONS;
+        navigate(Page.MODULE);
     }
 
     public void refreshPage() {
@@ -165,18 +189,22 @@ public class ClickGuiScreen extends Screen {
     }
 
     private boolean isDrillIn() {
-        return page == Page.HUD_ROWS;
+        return page == Page.SETTINGS_ROWS || page == Page.MODULE;
     }
 
     private Page backPage() {
-        return Page.HUD;
+        return switch (page) {
+            case MODULE -> Page.MODULES;
+            case SETTINGS_ROWS -> Page.MODULE;
+            default -> Page.SETTINGS;
+        };
     }
 
     private Page sidebarPage() {
         return switch (page) {
+            case MODULES, MODULE, SETTINGS_ROWS -> Page.MODULES;
             case SETTINGS -> Page.SETTINGS;
             case CONFIG -> Page.CONFIG;
-            case HUD, HUD_ROWS -> Page.HUD;
         };
     }
 
@@ -254,7 +282,8 @@ public class ClickGuiScreen extends Screen {
         GuiDraw.text(ctx, textRenderer, modVersion, textX, textY + 11, GuiTheme.MUTED);
 
         int ny = hasLogo ? logoY + logoS + 12 : textY + 26;
-        drawNavSection(ctx, mouseX, mouseY, ny, "MENU", false);
+        ny = drawNavSection(ctx, mouseX, mouseY, ny, "HOME", true);
+        drawNavSection(ctx, mouseX, mouseY, ny + 12, "CONFIGURATION", false);
     }
 
     private int drawNavSection(DrawContext ctx, int mouseX, int mouseY, int startY, String title, boolean main) {
@@ -294,11 +323,15 @@ public class ClickGuiScreen extends Screen {
         String title;
         String sub;
         switch (page) {
-            case SETTINGS -> { title = "Settings"; sub = "Appearance and keybinds"; }
+            case MODULES -> { title = "Modules"; sub = "Manage modules"; }
+            case SETTINGS -> { title = "Settings"; sub = "Appearance, keybinds, and HUD"; }
             case CONFIG -> { title = "Config"; sub = "Profiles"; }
-            case HUD -> { title = "HUD"; sub = "Stat card layout"; }
-            case HUD_ROWS -> { title = "EMC Stats rows"; sub = "Show or hide card lines"; }
-            default -> { title = "Settings"; sub = ""; }
+            case SETTINGS_ROWS -> { title = "EMC Stats rows"; sub = "Show or hide card lines"; }
+            case MODULE -> {
+                title = module != null ? module.title : "Module";
+                sub = module != null && module.comingSoon ? "Coming Soon!" : "Statistics";
+            }
+            default -> { title = "Modules"; sub = ""; }
         }
 
         int tx = contentX;

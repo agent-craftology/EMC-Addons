@@ -28,6 +28,8 @@ public final class StatCard {
     private static final int HANDLE_GAP = 6;
     private static final int GRAPH_H = 36;
     private static final int GRAPH_LABEL_H = 10;
+    /** Breathing room between the sparkline and the first stat row below it. */
+    private static final int GRAPH_GAP = 4;
 
     private StatCard() {}
 
@@ -51,7 +53,7 @@ public final class StatCard {
             rowsH += ROW_H + (row.progress >= 0 ? PROGRESS_EXTRA : 0);
         }
         if (hasSparkline(source, advanced)) {
-            rowsH += GRAPH_LABEL_H + GRAPH_H;
+            rowsH += GRAPH_LABEL_H + GRAPH_H + GRAPH_GAP;
         }
         return PAD_TOP + HEADER_H + rowsH + PAD_BOTTOM;
     }
@@ -103,7 +105,7 @@ public final class StatCard {
         if (hasSparkline(source, advanced)) {
             int graphW = w - PAD_LEFT - PAD_RIGHT;
             drawSparkline(ctx, tr, source, x + PAD_LEFT, rowY, graphW);
-            rowY += GRAPH_LABEL_H + GRAPH_H;
+            rowY += GRAPH_LABEL_H + GRAPH_H + GRAPH_GAP;
         }
         for (StatRow row : rows(source, advanced)) {
             GuiDraw.textShadow(ctx, tr, row.label, x + PAD_LEFT, rowY, GuiTheme.HUD_MUTED);

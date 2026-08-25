@@ -43,14 +43,19 @@ public final class EmcSidebar {
         boolean hasMoneyKw = false, hasSoulsKw = false, hasEssenceKw = false, hasShardsKw = false;
         boolean hasCreditsKw = false, hasSwingsKw = false, hasRebirthKw = false;
 
+        boolean hub = isHubText(normalizeSmallCaps(objective.getDisplayName().getString().replaceAll("§.", "")));
+        boolean dungeonKw = false;
+
         for (ScoreboardEntry entry : scoreboard.getScoreboardEntries(objective)) {
             String ownerName = entry.owner();
             String text = reconstructLine(scoreboard, ownerName);
             String stripped = text.replaceAll("§.", "");
             String normalized = normalizeSmallCaps(stripped);
+            String lower = normalized.toLowerCase();
+            if (isHubText(normalized)) hub = true;
+            if (isDungeonKeyword(lower)) dungeonKw = true;
             if (!containsDigit(normalized)) continue;
 
-            String lower = normalized.toLowerCase();
             int score = entry.value();
             boolean assignedByPosition = true;
 
@@ -125,6 +130,10 @@ public final class EmcSidebar {
             }
         }
 
+        Location location = Location.UNKNOWN;
+        if (hub) location = Location.HUB;
+        else if (dungeonKw) location = Location.DUNGEONS;
+
         return new Snapshot(
                 hasMoneyPos ? moneyPos : moneyKw,
                 hasSoulsPos ? soulsPos : soulsKw,
@@ -139,7 +148,8 @@ public final class EmcSidebar {
                 hasShardsPos || hasShardsKw,
                 hasCreditsPos || hasCreditsKw,
                 hasSwingsPos || hasSwingsKw,
-                hasRebirthPos || hasRebirthKw
+                hasRebirthPos || hasRebirthKw,
+                location
         );
     }
 
@@ -256,6 +266,18 @@ public final class EmcSidebar {
         return false;
     }
 
+    private static boolean isHubText(String text) {
+        if (text == null || text.isEmpty()) return false;
+        String lower = text.toLowerCase();
+        if (lower.contains("lobby server")) return true;
+        return lower.contains("server:") && lower.contains("hub");
+    }
+
+    private static boolean isDungeonKeyword(String lower) {
+        return lower.contains("souls") || lower.contains("essence") || lower.contains("shards")
+                || lower.contains("swings") || lower.contains("rebirth");
+    }
+
     private static boolean isMoneyKeyword(String lower) {
         if (lower.contains("souls") || lower.contains("essence") || lower.contains("shards")
                 || lower.contains("credits") || lower.contains("sparklers")) {
@@ -263,6 +285,8 @@ public final class EmcSidebar {
         }
         return lower.contains("money") || lower.contains("$");
     }
+
+    public enum Location { HUB, DUNGEONS, UNKNOWN }
 
     public static final class Snapshot {
         public final double money;
@@ -280,12 +304,14 @@ public final class EmcSidebar {
         public final boolean hasCredits;
         public final boolean hasSwings;
         public final boolean hasRebirth;
+        public final Location location;
 
         private Snapshot(
                 double money, double souls, double essence, double shards, double credits, double swings,
                 int rebirthLevel,
                 boolean hasMoney, boolean hasSouls, boolean hasEssence, boolean hasShards,
-                boolean hasCredits, boolean hasSwings, boolean hasRebirth
+                boolean hasCredits, boolean hasSwings, boolean hasRebirth,
+                Location location
         ) {
             this.money = money;
             this.souls = souls;
@@ -301,10 +327,12 @@ public final class EmcSidebar {
             this.hasCredits = hasCredits;
             this.hasSwings = hasSwings;
             this.hasRebirth = hasRebirth;
+            this.location = location == null ? Location.UNKNOWN : location;
         }
 
         public static Snapshot empty() {
-            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false);
+            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false,
+                    Location.UNKNOWN);
         }
     }
 }

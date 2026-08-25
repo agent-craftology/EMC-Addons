@@ -6,6 +6,7 @@ import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardEntry;
 import net.minecraft.scoreboard.ScoreboardObjective;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,7 +25,40 @@ public final class EmcSidebar {
     private static final Pattern REBIRTH_PATTERN =
             Pattern.compile("rebirth\\s*:\\s*(\\d+(?:\\.\\d+)?)", Pattern.CASE_INSENSITIVE);
 
+    public enum Location {
+        HUB, DUNGEONS, UNKNOWN
+    }
+
     private EmcSidebar() {}
+
+    public static Location detectLocation(String... strippedLines) {
+        boolean hub = false;
+        boolean dungeons = false;
+        if (strippedLines != null) {
+            for (String line : strippedLines) {
+                if (line == null) continue;
+                String lower = normalizeSmallCaps(line).toLowerCase(Locale.ROOT);
+                if (isHubLine(lower)) hub = true;
+                if (isDungeonLine(lower)) dungeons = true;
+            }
+        }
+        if (hub) return Location.HUB;
+        if (dungeons) return Location.DUNGEONS;
+        return Location.UNKNOWN;
+    }
+
+    public static boolean isHubLine(String lower) {
+        if (lower == null) return false;
+        if (lower.contains("lobby server")) return true;
+        return lower.contains("server:") && lower.contains("hub");
+    }
+
+    private static boolean isDungeonLine(String lower) {
+        if (lower == null) return false;
+        return lower.contains("souls") || lower.contains("essence") || lower.contains("shards")
+                || (lower.contains("swings") && !lower.contains("swing rate"))
+                || lower.contains("rebirth");
+    }
 
     public static Snapshot read(MinecraftClient client) {
         if (client == null || client.world == null) return Snapshot.empty();
@@ -42,12 +76,17 @@ public final class EmcSidebar {
         int rebirthKw = -1;
         boolean hasMoneyKw = false, hasSoulsKw = false, hasEssenceKw = false, hasShardsKw = false;
         boolean hasCreditsKw = false, hasSwingsKw = false, hasRebirthKw = false;
+        boolean sawHub = false;
+        boolean sawDungeon = false;
 
         for (ScoreboardEntry entry : scoreboard.getScoreboardEntries(objective)) {
             String ownerName = entry.owner();
             String text = reconstructLine(scoreboard, ownerName);
             String stripped = text.replaceAll("§.", "");
             String normalized = normalizeSmallCaps(stripped);
+            String locLower = normalized.toLowerCase(Locale.ROOT);
+            if (isHubLine(locLower)) sawHub = true;
+            if (isDungeonLine(locLower)) sawDungeon = true;
             if (!containsDigit(normalized)) continue;
 
             String lower = normalized.toLowerCase();
@@ -125,6 +164,7 @@ public final class EmcSidebar {
             }
         }
 
+        Location location = sawHub ? Location.HUB : (sawDungeon ? Location.DUNGEONS : Location.UNKNOWN);
         return new Snapshot(
                 hasMoneyPos ? moneyPos : moneyKw,
                 hasSoulsPos ? soulsPos : soulsKw,
@@ -139,7 +179,8 @@ public final class EmcSidebar {
                 hasShardsPos || hasShardsKw,
                 hasCreditsPos || hasCreditsKw,
                 hasSwingsPos || hasSwingsKw,
-                hasRebirthPos || hasRebirthKw
+                hasRebirthPos || hasRebirthKw,
+                location
         );
     }
 
@@ -164,6 +205,7 @@ public final class EmcSidebar {
                 case '\uA731': sb.append('s'); break; // ꜱ
                 case '\u1D1B': sb.append('t'); break; // ᴛ
                 case '\u1D1C': sb.append('u'); break; // ᴜ
+                case '\u1D20': sb.append('v'); break; // ᴠ
                 case '\u1D21': sb.append('w'); break; // ᴡ
                 case '\u028F': sb.append('y'); break; // ʏ
                 case '\u1D22': sb.append('z'); break; // ᴢ
@@ -280,12 +322,14 @@ public final class EmcSidebar {
         public final boolean hasCredits;
         public final boolean hasSwings;
         public final boolean hasRebirth;
+        public final Location location;
 
         private Snapshot(
                 double money, double souls, double essence, double shards, double credits, double swings,
                 int rebirthLevel,
                 boolean hasMoney, boolean hasSouls, boolean hasEssence, boolean hasShards,
-                boolean hasCredits, boolean hasSwings, boolean hasRebirth
+                boolean hasCredits, boolean hasSwings, boolean hasRebirth,
+                Location location
         ) {
             this.money = money;
             this.souls = souls;
@@ -301,10 +345,11 @@ public final class EmcSidebar {
             this.hasCredits = hasCredits;
             this.hasSwings = hasSwings;
             this.hasRebirth = hasRebirth;
+            this.location = location != null ? location : Location.UNKNOWN;
         }
 
         public static Snapshot empty() {
-            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false);
+            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false, Location.UNKNOWN);
         }
     }
 }
