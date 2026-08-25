@@ -114,6 +114,12 @@ public final class HudLayoutManager {
         return byId.get(id);
     }
 
+    public void toggleCard(String id) {
+        CardState card = byId.get(id);
+        if (card == null) return;
+        card.visible = !card.visible;
+    }
+
     public boolean isMasterVisible() {
         return masterVisible;
     }

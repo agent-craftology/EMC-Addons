@@ -36,6 +36,16 @@ public class EmcAddonsClient implements ClientModInitializer {
 
     private KeyBinding guiKeyBinding;
     private int guiOpenMenuKey = GLFW.GLFW_KEY_RIGHT_ALT;
+    private int hudToggleDungeonsKey = 0;
+    private int hudToggleGensKey = 0;
+    private int hudToggleFactoriesKey = 0;
+    private int hudToggleSkyblockKey = 0;
+    private int hudTogglePrisonsKey = 0;
+    private KeyBinding hudToggleDungeonsBinding;
+    private KeyBinding hudToggleGensBinding;
+    private KeyBinding hudToggleFactoriesBinding;
+    private KeyBinding hudToggleSkyblockBinding;
+    private KeyBinding hudTogglePrisonsBinding;
     private File CONFIG_DIR;
     private ConfigProfileManager configProfileManager;
     private final HudLayoutManager hudLayoutManager = new HudLayoutManager();
@@ -77,6 +87,11 @@ public class EmcAddonsClient implements ClientModInitializer {
                 "key.categories.emcaddons"
         ));
         guiKeyBinding.setBoundKey(InputUtil.fromKeyCode(guiOpenMenuKey, 0));
+        hudToggleDungeonsBinding = registerHudToggleBinding("key.emcaddons.toggle_dungeons", hudToggleDungeonsKey);
+        hudToggleGensBinding = registerHudToggleBinding("key.emcaddons.toggle_gens", hudToggleGensKey);
+        hudToggleFactoriesBinding = registerHudToggleBinding("key.emcaddons.toggle_factories", hudToggleFactoriesKey);
+        hudToggleSkyblockBinding = registerHudToggleBinding("key.emcaddons.toggle_skyblock", hudToggleSkyblockKey);
+        hudTogglePrisonsBinding = registerHudToggleBinding("key.emcaddons.toggle_prisons", hudTogglePrisonsKey);
         KeyBinding.updateKeysByCode();
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
@@ -149,13 +164,21 @@ public class EmcAddonsClient implements ClientModInitializer {
                 while (guiKeyBinding.wasPressed()) {
                     client.setScreen(new ClickGuiScreen(this));
                 }
+                pollHudToggle(hudToggleDungeonsBinding, hudToggleDungeonsKey, "emcstats");
+                pollHudToggle(hudToggleGensBinding, hudToggleGensKey, "gens");
+                pollHudToggle(hudToggleFactoriesBinding, hudToggleFactoriesKey, "factories");
+                pollHudToggle(hudToggleSkyblockBinding, hudToggleSkyblockKey, "skyblock");
+                pollHudToggle(hudTogglePrisonsBinding, hudTogglePrisonsKey, "prisons");
+                boolean keysChanged = false;
                 if (guiKeyBinding != null) {
                     int controlKey = KeyBindingHelper.getBoundKeyOf(guiKeyBinding).getCode();
                     if (controlKey != guiOpenMenuKey) {
                         guiOpenMenuKey = controlKey;
-                        saveSettings();
+                        keysChanged = true;
                     }
                 }
+                keysChanged |= syncHudToggleFromControls();
+                if (keysChanged) saveSettings();
             } catch (Exception e) {
                 System.err.println("EMC Addons: Error in client tick: " + e.getMessage());
             }
@@ -238,6 +261,46 @@ public class EmcAddonsClient implements ClientModInitializer {
             KeyBinding.updateKeysByCode();
         }
         saveSettings();
+    }
+
+    public int getHudToggleDungeonsKey() {
+        return hudToggleDungeonsKey;
+    }
+
+    public void setHudToggleDungeonsKey(int keyCode) {
+        hudToggleDungeonsKey = setHudToggleKey(hudToggleDungeonsBinding, keyCode);
+    }
+
+    public int getHudToggleGensKey() {
+        return hudToggleGensKey;
+    }
+
+    public void setHudToggleGensKey(int keyCode) {
+        hudToggleGensKey = setHudToggleKey(hudToggleGensBinding, keyCode);
+    }
+
+    public int getHudToggleFactoriesKey() {
+        return hudToggleFactoriesKey;
+    }
+
+    public void setHudToggleFactoriesKey(int keyCode) {
+        hudToggleFactoriesKey = setHudToggleKey(hudToggleFactoriesBinding, keyCode);
+    }
+
+    public int getHudToggleSkyblockKey() {
+        return hudToggleSkyblockKey;
+    }
+
+    public void setHudToggleSkyblockKey(int keyCode) {
+        hudToggleSkyblockKey = setHudToggleKey(hudToggleSkyblockBinding, keyCode);
+    }
+
+    public int getHudTogglePrisonsKey() {
+        return hudTogglePrisonsKey;
+    }
+
+    public void setHudTogglePrisonsKey(int keyCode) {
+        hudTogglePrisonsKey = setHudToggleKey(hudTogglePrisonsBinding, keyCode);
     }
 
     public GuiTheme.Theme getGuiTheme() {
@@ -396,10 +459,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         persistActiveProfile();
         configProfileManager.setActiveProfile(name);
         loadSettings();
-        if (guiKeyBinding != null) {
-            guiKeyBinding.setBoundKey(InputUtil.fromKeyCode(guiOpenMenuKey, 0));
-            KeyBinding.updateKeysByCode();
-        }
+        applyAllKeyBindings();
         return true;
     }
 
@@ -444,6 +504,11 @@ public class EmcAddonsClient implements ClientModInitializer {
             } catch (NumberFormatException ignored) {
             }
         }
+        hudToggleDungeonsKey = parseStoredKey(map, "hudToggleKey.dungeons", hudToggleDungeonsKey);
+        hudToggleGensKey = parseStoredKey(map, "hudToggleKey.gens", hudToggleGensKey);
+        hudToggleFactoriesKey = parseStoredKey(map, "hudToggleKey.factories", hudToggleFactoriesKey);
+        hudToggleSkyblockKey = parseStoredKey(map, "hudToggleKey.skyblock", hudToggleSkyblockKey);
+        hudTogglePrisonsKey = parseStoredKey(map, "hudToggleKey.prisons", hudTogglePrisonsKey);
         String gt = map.getProperty("guiTheme");
         if (gt != null) {
             try {
@@ -488,6 +553,11 @@ public class EmcAddonsClient implements ClientModInitializer {
     private void saveSettings() {
         Properties p = new Properties();
         p.setProperty("guiOpenMenuKey", String.valueOf(guiOpenMenuKey));
+        p.setProperty("hudToggleKey.dungeons", String.valueOf(hudToggleDungeonsKey));
+        p.setProperty("hudToggleKey.gens", String.valueOf(hudToggleGensKey));
+        p.setProperty("hudToggleKey.factories", String.valueOf(hudToggleFactoriesKey));
+        p.setProperty("hudToggleKey.skyblock", String.valueOf(hudToggleSkyblockKey));
+        p.setProperty("hudToggleKey.prisons", String.valueOf(hudTogglePrisonsKey));
         p.setProperty("guiTheme", guiTheme.name());
         p.setProperty("guiOpacity", String.valueOf(getGuiOpacity()));
         p.setProperty("clickGuiScale", String.format(java.util.Locale.ROOT, "%.2f", getClickGuiScale()));
@@ -500,6 +570,102 @@ public class EmcAddonsClient implements ClientModInitializer {
         hudLayoutManager.serialize(p);
         if (configProfileManager != null) {
             configProfileManager.saveActiveSettings(p);
+        }
+    }
+
+    private KeyBinding registerHudToggleBinding(String translationKey, int keyCode) {
+        KeyBinding binding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                translationKey,
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_UNKNOWN,
+                "key.categories.emcaddons"
+        ));
+        applyBoundKey(binding, keyCode);
+        return binding;
+    }
+
+    private void applyAllKeyBindings() {
+        if (guiKeyBinding != null) {
+            guiKeyBinding.setBoundKey(InputUtil.fromKeyCode(guiOpenMenuKey, 0));
+        }
+        applyBoundKey(hudToggleDungeonsBinding, hudToggleDungeonsKey);
+        applyBoundKey(hudToggleGensBinding, hudToggleGensKey);
+        applyBoundKey(hudToggleFactoriesBinding, hudToggleFactoriesKey);
+        applyBoundKey(hudToggleSkyblockBinding, hudToggleSkyblockKey);
+        applyBoundKey(hudTogglePrisonsBinding, hudTogglePrisonsKey);
+        KeyBinding.updateKeysByCode();
+    }
+
+    private int setHudToggleKey(KeyBinding binding, int keyCode) {
+        int stored = normalizeStoredKey(keyCode);
+        applyBoundKey(binding, stored);
+        if (binding != null) KeyBinding.updateKeysByCode();
+        saveSettings();
+        return stored;
+    }
+
+    private void pollHudToggle(KeyBinding binding, int storedKey, String cardId) {
+        if (binding == null) return;
+        while (binding.wasPressed()) {
+            if (storedKey != 0) {
+                hudLayoutManager.toggleCard(cardId);
+                persistHudLayout();
+            }
+        }
+    }
+
+    private boolean syncHudToggleFromControls() {
+        boolean changed = false;
+        int next = storedKeyCode(hudToggleDungeonsBinding);
+        if (hudToggleDungeonsBinding != null && next != hudToggleDungeonsKey) {
+            hudToggleDungeonsKey = next;
+            changed = true;
+        }
+        next = storedKeyCode(hudToggleGensBinding);
+        if (hudToggleGensBinding != null && next != hudToggleGensKey) {
+            hudToggleGensKey = next;
+            changed = true;
+        }
+        next = storedKeyCode(hudToggleFactoriesBinding);
+        if (hudToggleFactoriesBinding != null && next != hudToggleFactoriesKey) {
+            hudToggleFactoriesKey = next;
+            changed = true;
+        }
+        next = storedKeyCode(hudToggleSkyblockBinding);
+        if (hudToggleSkyblockBinding != null && next != hudToggleSkyblockKey) {
+            hudToggleSkyblockKey = next;
+            changed = true;
+        }
+        next = storedKeyCode(hudTogglePrisonsBinding);
+        if (hudTogglePrisonsBinding != null && next != hudTogglePrisonsKey) {
+            hudTogglePrisonsKey = next;
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static void applyBoundKey(KeyBinding binding, int keyCode) {
+        if (binding == null) return;
+        int code = keyCode == 0 ? GLFW.GLFW_KEY_UNKNOWN : keyCode;
+        binding.setBoundKey(InputUtil.fromKeyCode(code, 0));
+    }
+
+    private static int storedKeyCode(KeyBinding binding) {
+        if (binding == null) return 0;
+        return normalizeStoredKey(KeyBindingHelper.getBoundKeyOf(binding).getCode());
+    }
+
+    private static int normalizeStoredKey(int keyCode) {
+        return keyCode == GLFW.GLFW_KEY_UNKNOWN ? 0 : keyCode;
+    }
+
+    private static int parseStoredKey(Properties map, String key, int fallback) {
+        String value = map.getProperty(key);
+        if (value == null) return fallback;
+        try {
+            return normalizeStoredKey(Integer.parseInt(value.trim()));
+        } catch (NumberFormatException ignored) {
+            return fallback;
         }
     }
 }

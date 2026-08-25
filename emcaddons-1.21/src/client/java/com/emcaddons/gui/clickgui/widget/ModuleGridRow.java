@@ -60,7 +60,7 @@ public final class ModuleGridRow extends SettingRow {
                           GameMode mode, int cx, int cy) {
         boolean hover = GuiDraw.hit(mouseX, mouseY, cx, cy, cardW, GuiTheme.CARD_H);
         GuiDraw.fillRoundRect(ctx, cx, cy, cardW, GuiTheme.CARD_H, GuiTheme.CARD_RADIUS,
-                hover ? GuiTheme.CARD_HOVER : GuiTheme.CARD);
+                hover ? GuiTheme.CARD_HOVER : GuiTheme.ROW);
         if (hover) {
             GuiDraw.fill(ctx, cx, cy + 8, 2, GuiTheme.CARD_H - 16, GuiTheme.ACCENT);
         }

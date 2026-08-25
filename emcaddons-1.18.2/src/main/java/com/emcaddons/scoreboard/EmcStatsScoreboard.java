@@ -15,14 +15,13 @@ import java.util.Properties;
  */
 public final class EmcStatsScoreboard implements StatCardSource {
 
-    public enum Currency { SOULS, ESSENCE, SHARDS, CREDITS, MONEY }
+    public enum Currency { SOULS, ESSENCE, SHARDS }
 
     public enum HudStat {
         SOULS("Souls", "souls"),
         ESSENCE("Essence", "essence"),
         SHARDS("Shards", "shards"),
         CREDITS("Credits", "credits"),
-        MONEY("Money", "money"),
         SWINGS("Swings", "swings"),
         REBIRTH("Rebirth", "rebirth"),
         GRAPH("Graph", "graph"),
@@ -57,17 +56,15 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     private long sessionStartMs;
     private boolean sessionActive;
-    private double currentMoney;
     private double currentSouls;
     private double currentEssence;
     private double currentShards;
     private double currentCredits;
+    private boolean hasCredits;
     private double currentSwings;
-    private final SessionEarnedTracker moneyEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker soulsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker essenceEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker shardsEarned = new SessionEarnedTracker();
-    private final SessionEarnedTracker creditsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker swingsEarned = new SessionEarnedTracker();
     private int lastWorldIdentity;
     private final Map<HudStat, Boolean> hudStatVisible = new EnumMap<>(HudStat.class);
@@ -78,16 +75,12 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private long lastSparklineSampleMs;
     private int rebirthLevel = -1;
 
-    private double cachedSessionMoney;
-    private double cachedMoneyPerHour;
     private double cachedSessionSouls;
     private double cachedSoulsPerHour;
     private double cachedSessionEssence;
     private double cachedEssencePerHour;
     private double cachedSessionShards;
     private double cachedShardsPerHour;
-    private double cachedSessionCredits;
-    private double cachedCreditsPerHour;
     private double cachedSessionSwings;
     private double cachedSwingsPerHour;
     private long cachedActiveMs;
@@ -163,8 +156,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
         switch (graphCurrency) {
             case ESSENCE: return "Essence";
             case SHARDS: return "Shards";
-            case CREDITS: return "Credits";
-            case MONEY: return "Money";
             case SOULS:
             default: return "Souls";
         }
@@ -199,6 +190,10 @@ public final class EmcStatsScoreboard implements StatCardSource {
         resumeGrind();
         ingestBalances(client, snap);
         if (snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
+        if (snap.hasCredits) {
+            currentCredits = snap.credits;
+            hasCredits = true;
+        }
         refreshCachedRates();
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastSparklineSampleMs >= SPARKLINE_INTERVAL_MS) {
@@ -262,10 +257,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private void ingestBalances(MinecraftClient client, EmcSidebar.Snapshot snap) {
         lastWorldIdentity = worldIdentity(client);
         if (snap == null) snap = EmcSidebar.Snapshot.empty();
-        if (snap.hasMoney) {
-            currentMoney = snap.money;
-            if (sessionActive) moneyEarned.observeBalance(snap.money);
-        }
         if (snap.hasSouls) {
             currentSouls = snap.souls;
             if (sessionActive) soulsEarned.observeBalance(snap.souls);
@@ -278,10 +269,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
             currentShards = snap.shards;
             if (sessionActive) shardsEarned.observeBalance(snap.shards);
         }
-        if (snap.hasCredits) {
-            currentCredits = snap.credits;
-            if (sessionActive) creditsEarned.observeBalance(snap.credits);
-        }
         if (snap.hasSwings) {
             currentSwings = snap.swings;
             if (sessionActive) swingsEarned.observeBalance(snap.swings);
@@ -289,27 +276,21 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void refreshCachedRates() {
-        cachedSessionMoney = moneyEarned.earned();
         cachedSessionSouls = soulsEarned.earned();
         cachedSessionEssence = essenceEarned.earned();
         cachedSessionShards = shardsEarned.earned();
-        cachedSessionCredits = creditsEarned.earned();
         cachedSessionSwings = swingsEarned.earned();
         cachedActiveMs = grindElapsedMs();
         double activeHours = cachedActiveMs / 3_600_000.0;
         if (cachedActiveMs >= RATE_WARMUP_MS && activeHours > 0) {
-            cachedMoneyPerHour = cachedSessionMoney / activeHours;
             cachedSoulsPerHour = cachedSessionSouls / activeHours;
             cachedEssencePerHour = cachedSessionEssence / activeHours;
             cachedShardsPerHour = cachedSessionShards / activeHours;
-            cachedCreditsPerHour = cachedSessionCredits / activeHours;
             cachedSwingsPerHour = cachedSessionSwings / activeHours;
         } else {
-            cachedMoneyPerHour = 0.0;
             cachedSoulsPerHour = 0.0;
             cachedEssencePerHour = 0.0;
             cachedShardsPerHour = 0.0;
-            cachedCreditsPerHour = 0.0;
             cachedSwingsPerHour = 0.0;
         }
     }
@@ -338,17 +319,13 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void resetEarnedTrackers() {
-        moneyEarned.reset();
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();
-        creditsEarned.reset();
         swingsEarned.reset();
-        cachedSessionMoney = 0.0;
         cachedSessionSouls = 0.0;
         cachedSessionEssence = 0.0;
         cachedSessionShards = 0.0;
-        cachedSessionCredits = 0.0;
         cachedSessionSwings = 0.0;
     }
 
@@ -412,6 +389,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
         addIf(progression, HudStat.SWINGS, new StatRow("Session swings", formatMoney(cachedSessionSwings)));
         addIf(progression, HudStat.SWINGS, new StatRow("Swings/hr", formatRate(cachedSwingsPerHour, cachedActiveMs)));
         addIf(progression, HudStat.REBIRTH, new StatRow("Rebirth", rebirthLevel >= 0 ? String.valueOf(rebirthLevel) : "N/A"));
+        addIf(progression, HudStat.CREDITS, new StatRow("Credits", hasCredits ? formatMoney(currentCredits) : "N/A"));
         appendGroup(rows, progression);
         return rows;
     }
@@ -436,15 +414,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
             rows.add(new StatRow("Shards/hr", formatRate(cachedShardsPerHour, cachedActiveMs)));
             rows.add(new StatRow("Session shards", formatMoney(cachedSessionShards)));
         }
-        if (isHudStatVisible(HudStat.CREDITS)) {
-            rows.add(new StatRow("Credits/hr", formatRate(cachedCreditsPerHour, cachedActiveMs)));
-            rows.add(new StatRow("Session credits", formatMoney(cachedSessionCredits)));
-        }
-        if (isHudStatVisible(HudStat.MONEY)) {
-            rows.add(new StatRow("Money/hr", formatRate(cachedMoneyPerHour, cachedActiveMs)));
-            rows.add(new StatRow("Session money", formatMoney(cachedSessionMoney)));
-            rows.add(new StatRow("Total money", formatMoney(currentMoney)));
-        }
     }
 
     private void addIf(List<StatRow> rows, HudStat stat, StatRow row) {
@@ -455,8 +424,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
         switch (graphCurrency) {
             case ESSENCE: return essenceEarned.earned();
             case SHARDS: return shardsEarned.earned();
-            case CREDITS: return creditsEarned.earned();
-            case MONEY: return moneyEarned.earned();
             case SOULS:
             default: return soulsEarned.earned();
         }

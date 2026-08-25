@@ -40,7 +40,17 @@ public class EmcAddonsClient implements ClientModInitializer {
     private static EmcAddonsClient instance;
 
     private KeyMapping guiKeyMapping;
+    private KeyMapping dungeonsHudKeyMapping;
+    private KeyMapping gensHudKeyMapping;
+    private KeyMapping factoriesHudKeyMapping;
+    private KeyMapping skyblockHudKeyMapping;
+    private KeyMapping prisonsHudKeyMapping;
     private int guiOpenMenuKey = GLFW.GLFW_KEY_RIGHT_ALT;
+    private int hudToggleDungeonsKey = 0;
+    private int hudToggleGensKey = 0;
+    private int hudToggleFactoriesKey = 0;
+    private int hudToggleSkyblockKey = 0;
+    private int hudTogglePrisonsKey = 0;
     private File CONFIG_DIR;
     private ConfigProfileManager configProfileManager;
     private final HudLayoutManager hudLayoutManager = new HudLayoutManager();
@@ -82,6 +92,11 @@ public class EmcAddonsClient implements ClientModInitializer {
                 KEY_CATEGORY
         ));
         guiKeyMapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(guiOpenMenuKey));
+        dungeonsHudKeyMapping = registerHudToggleMapping("key.emcaddons.toggle_dungeons", hudToggleDungeonsKey);
+        gensHudKeyMapping = registerHudToggleMapping("key.emcaddons.toggle_gens", hudToggleGensKey);
+        factoriesHudKeyMapping = registerHudToggleMapping("key.emcaddons.toggle_factories", hudToggleFactoriesKey);
+        skyblockHudKeyMapping = registerHudToggleMapping("key.emcaddons.toggle_skyblock", hudToggleSkyblockKey);
+        prisonsHudKeyMapping = registerHudToggleMapping("key.emcaddons.toggle_prisons", hudTogglePrisonsKey);
         KeyMapping.resetMapping();
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
@@ -159,6 +174,28 @@ public class EmcAddonsClient implements ClientModInitializer {
                         guiOpenMenuKey = controlKey;
                         saveSettings();
                     }
+                }
+                pollHudToggle(dungeonsHudKeyMapping, hudToggleDungeonsKey, "emcstats");
+                pollHudToggle(gensHudKeyMapping, hudToggleGensKey, "gens");
+                pollHudToggle(factoriesHudKeyMapping, hudToggleFactoriesKey, "factories");
+                pollHudToggle(skyblockHudKeyMapping, hudToggleSkyblockKey, "skyblock");
+                pollHudToggle(prisonsHudKeyMapping, hudTogglePrisonsKey, "prisons");
+                int nextDungeons = syncHudToggleKey(dungeonsHudKeyMapping, hudToggleDungeonsKey);
+                int nextGens = syncHudToggleKey(gensHudKeyMapping, hudToggleGensKey);
+                int nextFactories = syncHudToggleKey(factoriesHudKeyMapping, hudToggleFactoriesKey);
+                int nextSkyblock = syncHudToggleKey(skyblockHudKeyMapping, hudToggleSkyblockKey);
+                int nextPrisons = syncHudToggleKey(prisonsHudKeyMapping, hudTogglePrisonsKey);
+                if (nextDungeons != hudToggleDungeonsKey
+                        || nextGens != hudToggleGensKey
+                        || nextFactories != hudToggleFactoriesKey
+                        || nextSkyblock != hudToggleSkyblockKey
+                        || nextPrisons != hudTogglePrisonsKey) {
+                    hudToggleDungeonsKey = nextDungeons;
+                    hudToggleGensKey = nextGens;
+                    hudToggleFactoriesKey = nextFactories;
+                    hudToggleSkyblockKey = nextSkyblock;
+                    hudTogglePrisonsKey = nextPrisons;
+                    saveSettings();
                 }
             } catch (Exception e) {
                 System.err.println("EMC Addons: Error in client tick: " + e.getMessage());
@@ -241,6 +278,56 @@ public class EmcAddonsClient implements ClientModInitializer {
             guiKeyMapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(guiOpenMenuKey));
             KeyMapping.resetMapping();
         }
+        saveSettings();
+    }
+
+    public int getHudToggleDungeonsKey() {
+        return hudToggleDungeonsKey;
+    }
+
+    public void setHudToggleDungeonsKey(int keyCode) {
+        this.hudToggleDungeonsKey = normalizeHudToggleKey(keyCode);
+        bindHudToggleMapping(dungeonsHudKeyMapping, hudToggleDungeonsKey);
+        saveSettings();
+    }
+
+    public int getHudToggleGensKey() {
+        return hudToggleGensKey;
+    }
+
+    public void setHudToggleGensKey(int keyCode) {
+        this.hudToggleGensKey = normalizeHudToggleKey(keyCode);
+        bindHudToggleMapping(gensHudKeyMapping, hudToggleGensKey);
+        saveSettings();
+    }
+
+    public int getHudToggleFactoriesKey() {
+        return hudToggleFactoriesKey;
+    }
+
+    public void setHudToggleFactoriesKey(int keyCode) {
+        this.hudToggleFactoriesKey = normalizeHudToggleKey(keyCode);
+        bindHudToggleMapping(factoriesHudKeyMapping, hudToggleFactoriesKey);
+        saveSettings();
+    }
+
+    public int getHudToggleSkyblockKey() {
+        return hudToggleSkyblockKey;
+    }
+
+    public void setHudToggleSkyblockKey(int keyCode) {
+        this.hudToggleSkyblockKey = normalizeHudToggleKey(keyCode);
+        bindHudToggleMapping(skyblockHudKeyMapping, hudToggleSkyblockKey);
+        saveSettings();
+    }
+
+    public int getHudTogglePrisonsKey() {
+        return hudTogglePrisonsKey;
+    }
+
+    public void setHudTogglePrisonsKey(int keyCode) {
+        this.hudTogglePrisonsKey = normalizeHudToggleKey(keyCode);
+        bindHudToggleMapping(prisonsHudKeyMapping, hudTogglePrisonsKey);
         saveSettings();
     }
 
@@ -404,6 +491,11 @@ public class EmcAddonsClient implements ClientModInitializer {
             guiKeyMapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(guiOpenMenuKey));
             KeyMapping.resetMapping();
         }
+        bindHudToggleMapping(dungeonsHudKeyMapping, hudToggleDungeonsKey);
+        bindHudToggleMapping(gensHudKeyMapping, hudToggleGensKey);
+        bindHudToggleMapping(factoriesHudKeyMapping, hudToggleFactoriesKey);
+        bindHudToggleMapping(skyblockHudKeyMapping, hudToggleSkyblockKey);
+        bindHudToggleMapping(prisonsHudKeyMapping, hudTogglePrisonsKey);
         return true;
     }
 
@@ -448,6 +540,11 @@ public class EmcAddonsClient implements ClientModInitializer {
             } catch (NumberFormatException ignored) {
             }
         }
+        hudToggleDungeonsKey = parseHudToggleKey(map.getProperty("hudToggleKey.dungeons"));
+        hudToggleGensKey = parseHudToggleKey(map.getProperty("hudToggleKey.gens"));
+        hudToggleFactoriesKey = parseHudToggleKey(map.getProperty("hudToggleKey.factories"));
+        hudToggleSkyblockKey = parseHudToggleKey(map.getProperty("hudToggleKey.skyblock"));
+        hudTogglePrisonsKey = parseHudToggleKey(map.getProperty("hudToggleKey.prisons"));
         String gt = map.getProperty("guiTheme");
         if (gt != null) {
             try {
@@ -492,6 +589,11 @@ public class EmcAddonsClient implements ClientModInitializer {
     private void saveSettings() {
         Properties p = new Properties();
         p.setProperty("guiOpenMenuKey", String.valueOf(guiOpenMenuKey));
+        p.setProperty("hudToggleKey.dungeons", String.valueOf(hudToggleDungeonsKey));
+        p.setProperty("hudToggleKey.gens", String.valueOf(hudToggleGensKey));
+        p.setProperty("hudToggleKey.factories", String.valueOf(hudToggleFactoriesKey));
+        p.setProperty("hudToggleKey.skyblock", String.valueOf(hudToggleSkyblockKey));
+        p.setProperty("hudToggleKey.prisons", String.valueOf(hudTogglePrisonsKey));
         p.setProperty("guiTheme", guiTheme.name());
         p.setProperty("guiOpacity", String.valueOf(getGuiOpacity()));
         p.setProperty("clickGuiScale", String.format(java.util.Locale.ROOT, "%.2f", getClickGuiScale()));
@@ -505,5 +607,53 @@ public class EmcAddonsClient implements ClientModInitializer {
         if (configProfileManager != null) {
             configProfileManager.saveActiveSettings(p);
         }
+    }
+
+    private KeyMapping registerHudToggleMapping(String translationKey, int keyCode) {
+        KeyMapping mapping = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                translationKey,
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_UNKNOWN,
+                KEY_CATEGORY
+        ));
+        mapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(keyCodeToInput(keyCode)));
+        return mapping;
+    }
+
+    private static void bindHudToggleMapping(KeyMapping mapping, int keyCode) {
+        if (mapping == null) return;
+        mapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(keyCodeToInput(keyCode)));
+        KeyMapping.resetMapping();
+    }
+
+    private void pollHudToggle(KeyMapping mapping, int storedKey, String cardId) {
+        if (mapping == null) return;
+        while (mapping.consumeClick()) {
+            if (storedKey == 0) continue;
+            hudLayoutManager.toggleCard(cardId);
+            persistHudLayout();
+        }
+    }
+
+    private int syncHudToggleKey(KeyMapping mapping, int current) {
+        if (mapping == null) return current;
+        return normalizeHudToggleKey(KeyMappingHelper.getBoundKeyOf(mapping).getValue());
+    }
+
+    private static int parseHudToggleKey(String raw) {
+        if (raw == null) return 0;
+        try {
+            return normalizeHudToggleKey(Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private static int normalizeHudToggleKey(int keyCode) {
+        return keyCode <= 0 ? 0 : keyCode;
+    }
+
+    private static int keyCodeToInput(int keyCode) {
+        return keyCode <= 0 ? GLFW.GLFW_KEY_UNKNOWN : keyCode;
     }
 }

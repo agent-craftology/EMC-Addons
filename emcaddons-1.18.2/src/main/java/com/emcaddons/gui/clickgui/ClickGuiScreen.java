@@ -124,6 +124,11 @@ public class ClickGuiScreen extends Screen {
                 () -> mod.setWindowIconEnabled(!mod.isWindowIconEnabled())));
         rows.add(new SettingRow.Section("CONTROLS"));
         rows.add(new SettingRow.Keybind("Open menu", mod::getGuiOpenMenuKey, mod::setGuiOpenMenuKey, false));
+        rows.add(new SettingRow.Keybind("Toggle Dungeons HUD", mod::getHudToggleDungeonsKey, mod::setHudToggleDungeonsKey, true));
+        rows.add(new SettingRow.Keybind("Toggle Gens HUD", mod::getHudToggleGensKey, mod::setHudToggleGensKey, true));
+        rows.add(new SettingRow.Keybind("Toggle Factories HUD", mod::getHudToggleFactoriesKey, mod::setHudToggleFactoriesKey, true));
+        rows.add(new SettingRow.Keybind("Toggle Skyblock HUD", mod::getHudToggleSkyblockKey, mod::setHudToggleSkyblockKey, true));
+        rows.add(new SettingRow.Keybind("Toggle Prisons HUD", mod::getHudTogglePrisonsKey, mod::setHudTogglePrisonsKey, true));
         rows.add(new SettingRow.Section("HUD"));
         rows.add(new SettingRow.Button("Edit HUD layout", () -> {
             if (client != null) client.setScreen(new com.emcaddons.gui.HudEditScreen(mod.getHudLayoutManager(), mod::persistHudLayout));

@@ -74,6 +74,12 @@ public final class HudLayoutManager {
         return null;
     }
 
+    public void toggleCard(String id) {
+        CardState card = get(id);
+        if (card == null) return;
+        card.visible = !card.visible;
+    }
+
     public int resolveX(CardState card, int cardW) {
         int screenW = Minecraft.getInstance().getWindow().getGuiScaledWidth();
         return switch (card.anchor) {

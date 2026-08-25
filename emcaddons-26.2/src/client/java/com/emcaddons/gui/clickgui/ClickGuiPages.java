@@ -40,6 +40,11 @@ final class ClickGuiPages {
         rows.add(new ToggleRow("Window icon", mod::isWindowIconEnabled, mod::setWindowIconEnabled));
         rows.add(new HeadingRow("KEYBINDS"));
         rows.add(new KeybindRow("Open menu", mod::getGuiOpenMenuKey, mod::setGuiOpenMenuKey, false));
+        rows.add(new KeybindRow("Toggle Dungeons HUD", mod::getHudToggleDungeonsKey, mod::setHudToggleDungeonsKey, true));
+        rows.add(new KeybindRow("Toggle Gens HUD", mod::getHudToggleGensKey, mod::setHudToggleGensKey, true));
+        rows.add(new KeybindRow("Toggle Factories HUD", mod::getHudToggleFactoriesKey, mod::setHudToggleFactoriesKey, true));
+        rows.add(new KeybindRow("Toggle Skyblock HUD", mod::getHudToggleSkyblockKey, mod::setHudToggleSkyblockKey, true));
+        rows.add(new KeybindRow("Toggle Prisons HUD", mod::getHudTogglePrisonsKey, mod::setHudTogglePrisonsKey, true));
         rows.add(new HeadingRow("HUD"));
         rows.addAll(hudControls(mod));
         return rows;

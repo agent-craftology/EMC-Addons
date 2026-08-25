@@ -17,7 +17,6 @@ public final class EmcSidebar {
     private static final int SCORE_SHARDS = 4;
     private static final int SCORE_ESSENCE = 5;
     private static final int SCORE_SOULS = 6;
-    private static final int SCORE_MONEY = 7;
     private static final int SCORE_SWINGS = 11;
     private static final int SCORE_REBIRTH = 12;
 
@@ -33,14 +32,14 @@ public final class EmcSidebar {
         ScoreboardObjective objective = scoreboard.getObjectiveForSlot(1); // SIDEBAR
         if (objective == null) return Snapshot.empty();
 
-        double moneyPos = 0, soulsPos = 0, essencePos = 0, shardsPos = 0, creditsPos = 0, swingsPos = 0;
+        double soulsPos = 0, essencePos = 0, shardsPos = 0, creditsPos = 0, swingsPos = 0;
         int rebirthPos = -1;
-        boolean hasMoneyPos = false, hasSoulsPos = false, hasEssencePos = false, hasShardsPos = false;
+        boolean hasSoulsPos = false, hasEssencePos = false, hasShardsPos = false;
         boolean hasCreditsPos = false, hasSwingsPos = false, hasRebirthPos = false;
 
-        double moneyKw = 0, soulsKw = 0, essenceKw = 0, shardsKw = 0, creditsKw = 0, swingsKw = 0;
+        double soulsKw = 0, essenceKw = 0, shardsKw = 0, creditsKw = 0, swingsKw = 0;
         int rebirthKw = -1;
-        boolean hasMoneyKw = false, hasSoulsKw = false, hasEssenceKw = false, hasShardsKw = false;
+        boolean hasSoulsKw = false, hasEssenceKw = false, hasShardsKw = false;
         boolean hasCreditsKw = false, hasSwingsKw = false, hasRebirthKw = false;
 
         boolean hub = false;
@@ -60,10 +59,6 @@ public final class EmcSidebar {
             boolean assignedByPosition = true;
 
             switch (scoreValue) {
-                case SCORE_MONEY:
-                    moneyPos = parseAmount(text);
-                    hasMoneyPos = true;
-                    break;
                 case SCORE_SOULS:
                     soulsPos = parseAmount(text);
                     hasSoulsPos = true;
@@ -95,10 +90,6 @@ public final class EmcSidebar {
 
             if (assignedByPosition) continue;
 
-            if (!hasMoneyKw && isMoneyKeyword(lower)) {
-                moneyKw = parseAmount(text);
-                hasMoneyKw = true;
-            }
             if (!hasSoulsKw && lower.contains("souls")) {
                 soulsKw = parseAmount(text);
                 hasSoulsKw = true;
@@ -132,14 +123,12 @@ public final class EmcSidebar {
 
         Location location = hub ? Location.HUB : (dungeonKw ? Location.DUNGEONS : Location.UNKNOWN);
         return new Snapshot(
-                hasMoneyPos ? moneyPos : moneyKw,
                 hasSoulsPos ? soulsPos : soulsKw,
                 hasEssencePos ? essencePos : essenceKw,
                 hasShardsPos ? shardsPos : shardsKw,
                 hasCreditsPos ? creditsPos : creditsKw,
                 hasSwingsPos ? swingsPos : swingsKw,
                 hasRebirthPos ? rebirthPos : (hasRebirthKw ? rebirthKw : -1),
-                hasMoneyPos || hasMoneyKw,
                 hasSoulsPos || hasSoulsKw,
                 hasEssencePos || hasEssenceKw,
                 hasShardsPos || hasShardsKw,
@@ -263,14 +252,6 @@ public final class EmcSidebar {
         return false;
     }
 
-    private static boolean isMoneyKeyword(String lower) {
-        if (lower.contains("souls") || lower.contains("essence") || lower.contains("shards")
-                || lower.contains("credits") || lower.contains("sparklers")) {
-            return false;
-        }
-        return lower.contains("money") || lower.contains("$");
-    }
-
     /** Hub sidebar after {@link #normalizeSmallCaps}: {@code LOBBY SERVER} or {@code SERVER: Hub1}. */
     private static boolean isHubLine(String lower) {
         if (lower.contains("lobby server")) return true;
@@ -285,7 +266,6 @@ public final class EmcSidebar {
     public enum Location { HUB, DUNGEONS, UNKNOWN }
 
     public static final class Snapshot {
-        public final double money;
         public final double souls;
         public final double essence;
         public final double shards;
@@ -293,7 +273,6 @@ public final class EmcSidebar {
         public final double swings;
         public final int rebirthLevel;
 
-        public final boolean hasMoney;
         public final boolean hasSouls;
         public final boolean hasEssence;
         public final boolean hasShards;
@@ -303,20 +282,18 @@ public final class EmcSidebar {
         public final Location location;
 
         private Snapshot(
-                double money, double souls, double essence, double shards, double credits, double swings,
+                double souls, double essence, double shards, double credits, double swings,
                 int rebirthLevel,
-                boolean hasMoney, boolean hasSouls, boolean hasEssence, boolean hasShards,
+                boolean hasSouls, boolean hasEssence, boolean hasShards,
                 boolean hasCredits, boolean hasSwings, boolean hasRebirth,
                 Location location
         ) {
-            this.money = money;
             this.souls = souls;
             this.essence = essence;
             this.shards = shards;
             this.credits = credits;
             this.swings = swings;
             this.rebirthLevel = rebirthLevel;
-            this.hasMoney = hasMoney;
             this.hasSouls = hasSouls;
             this.hasEssence = hasEssence;
             this.hasShards = hasShards;
@@ -331,7 +308,7 @@ public final class EmcSidebar {
         }
 
         public static Snapshot empty() {
-            return new Snapshot(0, 0, 0, 0, 0, 0, -1, false, false, false, false, false, false, false, Location.UNKNOWN);
+            return new Snapshot(0, 0, 0, 0, 0, -1, false, false, false, false, false, false, Location.UNKNOWN);
         }
     }
 }

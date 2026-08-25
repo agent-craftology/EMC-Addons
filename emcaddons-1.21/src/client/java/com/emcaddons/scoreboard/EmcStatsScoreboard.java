@@ -16,14 +16,13 @@ import java.util.Properties;
  */
 public final class EmcStatsScoreboard implements StatCardSource {
 
-    public enum Currency { SOULS, ESSENCE, SHARDS, CREDITS, MONEY }
+    public enum Currency { SOULS, ESSENCE, SHARDS }
 
     public enum HudStat {
         SOULS("Souls", "souls"),
         ESSENCE("Essence", "essence"),
         SHARDS("Shards", "shards"),
         CREDITS("Credits", "credits"),
-        MONEY("Money", "money"),
         SWINGS("Swings", "swings"),
         REBIRTH("Rebirth", "rebirth"),
         GRAPH("Graph", "graph"),
@@ -41,19 +40,17 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private final Map<HudStat, Boolean> hudStatVisible = new EnumMap<>(HudStat.class);
     private Currency graphCurrency = Currency.SOULS;
 
-    private double currentMoney;
     private double currentSouls;
     private double currentEssence;
     private double currentShards;
     private double currentCredits;
+    private boolean hasCredits;
     private double currentSwings;
     private int rebirthLevel = -1;
 
-    private final SessionEarnedTracker moneyEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker soulsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker essenceEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker shardsEarned = new SessionEarnedTracker();
-    private final SessionEarnedTracker creditsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker swingsEarned = new SessionEarnedTracker();
     private final EnumMap<GameMode, SessionEarnedTracker> modeBuckets = new EnumMap<>(GameMode.class);
     private GameMode lastMode = GameMode.DUNGEONS;
@@ -66,16 +63,11 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private String soulsPerHourText = "--";
     private String essencePerHourText = "--";
     private String shardsPerHourText = "--";
-    private String creditsPerHourText = "--";
-    private String moneyPerHourText = "--";
     private String swingsPerHourText = "--";
     private String sessionSoulsText = "0.00";
     private String sessionEssenceText = "0.00";
     private String sessionShardsText = "0.00";
-    private String sessionCreditsText = "0.00";
-    private String sessionMoneyText = "$0.00";
     private String sessionSwingsText = "0.00";
-    private String totalMoneyText = "$0.00";
     private String totalSwingsText = "0.00";
 
     private static final int SPARKLINE_CAPACITY = 60;
@@ -163,40 +155,35 @@ public final class EmcStatsScoreboard implements StatCardSource {
         if (grinding) {
             ingestBalances(snap);
             if (snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
+            if (snap.hasCredits) {
+                currentCredits = snap.credits;
+                hasCredits = true;
+            }
         }
 
         long elapsedMs = grindElapsedMs();
         grindTimeText = formatGrindTime(elapsedMs);
-        double sessionMoney = moneyEarned.earned();
         double sessionSoulsMade = soulsEarned.earned();
         double sessionEssenceMade = essenceEarned.earned();
         double sessionShardsMade = shardsEarned.earned();
-        double sessionCreditsMade = creditsEarned.earned();
         double sessionSwingsMade = swingsEarned.earned();
         double hours = elapsedMs / 3_600_000.0;
         boolean rateReady = elapsedMs >= RATE_WARMUP_MS && hours > 0;
 
-        sessionMoneyText = "$" + formatMoney(sessionMoney);
-        totalMoneyText = "$" + formatMoney(currentMoney);
         sessionSoulsText = formatMoney(sessionSoulsMade);
         sessionEssenceText = formatMoney(sessionEssenceMade);
         sessionShardsText = formatMoney(sessionShardsMade);
-        sessionCreditsText = formatMoney(sessionCreditsMade);
         sessionSwingsText = formatMoney(sessionSwingsMade);
         totalSwingsText = formatMoney(currentSwings);
         if (rateReady) {
             soulsPerHourText = formatMoney(sessionSoulsMade / hours);
             essencePerHourText = formatMoney(sessionEssenceMade / hours);
             shardsPerHourText = formatMoney(sessionShardsMade / hours);
-            creditsPerHourText = formatMoney(sessionCreditsMade / hours);
-            moneyPerHourText = "$" + formatMoney(sessionMoney / hours);
             swingsPerHourText = formatMoney(sessionSwingsMade / hours);
         } else {
             soulsPerHourText = "--";
             essencePerHourText = "--";
             shardsPerHourText = "--";
-            creditsPerHourText = "--";
-            moneyPerHourText = "--";
             swingsPerHourText = "--";
         }
 
@@ -253,6 +240,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
         addIf(rows, HudStat.SWINGS, new StatRow("Total swings", totalSwingsText));
         addIf(rows, HudStat.SWINGS, new StatRow("Session swings", sessionSwingsText));
         addIf(rows, HudStat.SWINGS, new StatRow("Swings/hr", swingsPerHourText));
+        addIf(rows, HudStat.CREDITS, new StatRow("Credits", hasCredits ? formatMoney(currentCredits) : "N/A"));
         addIf(rows, HudStat.REBIRTH, new StatRow("Rebirth", rebirthLevel >= 0 ? String.valueOf(rebirthLevel) : "N/A"));
         return rows;
     }
@@ -274,8 +262,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
     public String sparklineLabel() {
         if (graphCurrency == Currency.ESSENCE) return "Essence";
         if (graphCurrency == Currency.SHARDS) return "Shards";
-        if (graphCurrency == Currency.CREDITS) return "Credits";
-        if (graphCurrency == Currency.MONEY) return "Money";
         return "Souls";
     }
 
@@ -297,15 +283,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
             rows.add(new StatRow("Shards/hr", shardsPerHourText));
             rows.add(new StatRow("Session shards", sessionShardsText));
         }
-        if (isHudStatVisible(HudStat.CREDITS)) {
-            rows.add(new StatRow("Credits/hr", creditsPerHourText));
-            rows.add(new StatRow("Session credits", sessionCreditsText));
-        }
-        if (isHudStatVisible(HudStat.MONEY)) {
-            rows.add(new StatRow("Money/hr", moneyPerHourText));
-            rows.add(new StatRow("Session money", sessionMoneyText));
-            rows.add(new StatRow("Total money", totalMoneyText));
-        }
         addIf(rows, HudStat.GRIND_TIME, new StatRow("Grind Time", grindTimeText));
     }
 
@@ -314,10 +291,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void ingestBalances(EmcSidebar.Snapshot snap) {
-        if (snap.hasMoney) {
-            currentMoney = snap.money;
-            moneyEarned.observeBalance(snap.money);
-        }
         if (snap.hasSouls) {
             currentSouls = snap.souls;
             soulsEarned.observeBalance(snap.souls);
@@ -329,10 +302,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
         if (snap.hasShards) {
             currentShards = snap.shards;
             shardsEarned.observeBalance(snap.shards);
-        }
-        if (snap.hasCredits) {
-            currentCredits = snap.credits;
-            creditsEarned.observeBalance(snap.credits);
         }
         if (snap.hasSwings) {
             currentSwings = snap.swings;
@@ -384,31 +353,23 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void resetEarnedTrackers() {
-        moneyEarned.reset();
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();
-        creditsEarned.reset();
         swingsEarned.reset();
         sessionSoulsText = "0.00";
         sessionEssenceText = "0.00";
         sessionShardsText = "0.00";
-        sessionCreditsText = "0.00";
         sessionSwingsText = "0.00";
-        sessionMoneyText = "$0.00";
         soulsPerHourText = "--";
         essencePerHourText = "--";
         shardsPerHourText = "--";
-        creditsPerHourText = "--";
-        moneyPerHourText = "--";
         swingsPerHourText = "--";
     }
 
     private double graphMade() {
         if (graphCurrency == Currency.ESSENCE) return essenceEarned.earned();
         if (graphCurrency == Currency.SHARDS) return shardsEarned.earned();
-        if (graphCurrency == Currency.CREDITS) return creditsEarned.earned();
-        if (graphCurrency == Currency.MONEY) return moneyEarned.earned();
         return soulsEarned.earned();
     }
 
