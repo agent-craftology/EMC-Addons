@@ -17,6 +17,7 @@ import com.emcaddons.gui.clickgui.widget.TextRow;
 import com.emcaddons.gui.clickgui.widget.ToggleRow;
 import com.emcaddons.scoreboard.EmcStatsScoreboard;
 import com.emcaddons.scoreboard.GameMode;
+import com.emcaddons.scoreboard.StatCard;
 import net.minecraft.client.MinecraftClient;
 
 import java.io.File;
@@ -89,6 +90,14 @@ final class ClickGuiPages {
             return c != null && c.isVisible();
         }, v -> {
             var c = mod.getHudLayoutManager().get("emcstats");
+            if (c != null) c.setVisible(v);
+            mod.persistHudLayout();
+        }));
+        rows.add(new ToggleRow("Zone card visible", () -> {
+            var c = mod.getHudLayoutManager().get("dungeonzone");
+            return c != null && c.isVisible();
+        }, v -> {
+            var c = mod.getHudLayoutManager().get("dungeonzone");
             if (c != null) c.setVisible(v);
             mod.persistHudLayout();
         }));
@@ -177,6 +186,12 @@ final class ClickGuiPages {
                 },
                 i -> {
                     if (i >= 0 && i < currencies.length) sb.setGraphCurrency(currencies[i]);
+                    mod.persistHudLayout();
+                }));
+        rows.add(new ModeRow("Graph quality", StatCard.GraphQuality.displayNames(),
+                () -> sb.getGraphQuality().ordinal(),
+                i -> {
+                    sb.setGraphQuality(StatCard.GraphQuality.fromIndex(i));
                     mod.persistHudLayout();
                 }));
         return rows;

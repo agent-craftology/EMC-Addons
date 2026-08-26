@@ -15,7 +15,7 @@ import java.util.Properties;
  */
 public final class EmcStatsScoreboard implements StatCardSource {
 
-    public enum Currency { SOULS, ESSENCE, SHARDS }
+    public enum Currency { SOULS, ESSENCE, SHARDS, CREDITS }
 
     public enum HudStat {
         SOULS("Souls", "souls"),
@@ -53,6 +53,8 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private static final int SPARKLINE_CAPACITY = 60;
     private static final long SPARKLINE_INTERVAL_MS = 5_000L;
     private static final long RATE_WARMUP_MS = 30_000L;
+    private static final long CREDITS_STALE_MS = 3_000L;
+    private static final double[] EMPTY_SPARKLINE = new double[0];
 
     private long sessionStartMs;
     private boolean sessionActive;
@@ -61,10 +63,12 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private double currentShards;
     private double currentCredits;
     private boolean hasCredits;
+    private long lastCreditsSeenMs;
     private double currentSwings;
     private final SessionEarnedTracker soulsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker essenceEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker shardsEarned = new SessionEarnedTracker();
+    private final SessionEarnedTracker creditsEarned = new SessionEarnedTracker();
     private final SessionEarnedTracker swingsEarned = new SessionEarnedTracker();
     private int lastWorldIdentity;
     private final Map<HudStat, Boolean> hudStatVisible = new EnumMap<>(HudStat.class);
@@ -73,6 +77,10 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private int sparklineCount;
     private int sparklineHead;
     private long lastSparklineSampleMs;
+    private int sparklineVersion;
+    private double[] sparklineSnapshot = EMPTY_SPARKLINE;
+    private int sparklineSnapshotVersion = -1;
+    private StatCard.GraphQuality graphQuality = StatCard.GraphQuality.HIGH;
     private int rebirthLevel = -1;
 
     private double cachedSessionSouls;
@@ -83,6 +91,8 @@ public final class EmcStatsScoreboard implements StatCardSource {
     private double cachedShardsPerHour;
     private double cachedSessionSwings;
     private double cachedSwingsPerHour;
+    private double cachedSessionCredits;
+    private double cachedCreditsPerHour;
     private long cachedActiveMs;
     private long grindAccumulatedMs;
     private long grindResumeMs;
@@ -102,7 +112,22 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     public void setHudStatVisible(HudStat stat, boolean visible) {
-        if (stat != null) hudStatVisible.put(stat, visible);
+        if (stat == null) return;
+        Boolean previous = hudStatVisible.put(stat, visible);
+        if (stat == HudStat.GRAPH && (previous == null || previous != visible)) sparklineVersion++;
+    }
+
+    @Override
+    public StatCard.GraphQuality graphQuality() {
+        return graphQuality;
+    }
+
+    public StatCard.GraphQuality getGraphQuality() {
+        return graphQuality;
+    }
+
+    public void setGraphQuality(StatCard.GraphQuality quality) {
+        this.graphQuality = quality != null ? quality : StatCard.GraphQuality.HIGH;
     }
 
     public Currency getGraphCurrency() {
@@ -142,18 +167,34 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     @Override
     public double[] sparklineValues() {
-        if (!isHudStatVisible(HudStat.GRAPH) || sparklineCount <= 0) return new double[0];
-        double[] values = new double[sparklineCount];
+        if (sparklineSnapshotVersion != sparklineVersion) {
+            rebuildSparklineSnapshot();
+            sparklineSnapshotVersion = sparklineVersion;
+        }
+        return sparklineSnapshot;
+    }
+
+    @Override
+    public int sparklineVersion() {
+        return sparklineVersion;
+    }
+
+    private void rebuildSparklineSnapshot() {
+        if (!isHudStatVisible(HudStat.GRAPH) || sparklineCount <= 0) {
+            sparklineSnapshot = EMPTY_SPARKLINE;
+            return;
+        }
+        if (sparklineSnapshot.length != sparklineCount) sparklineSnapshot = new double[sparklineCount];
         int start = sparklineCount < SPARKLINE_CAPACITY ? 0 : sparklineHead;
         for (int i = 0; i < sparklineCount; i++) {
-            values[i] = sparklineBuffer[(start + i) % SPARKLINE_CAPACITY];
+            sparklineSnapshot[i] = sparklineBuffer[(start + i) % SPARKLINE_CAPACITY];
         }
-        return values;
     }
 
     @Override
     public String sparklineLabel() {
         switch (graphCurrency) {
+            case CREDITS: return "Credits";
             case ESSENCE: return "Essence";
             case SHARDS: return "Shards";
             case SOULS:
@@ -190,10 +231,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
         resumeGrind();
         ingestBalances(client, snap);
         if (snap.hasRebirth) rebirthLevel = snap.rebirthLevel;
-        if (snap.hasCredits) {
-            currentCredits = snap.credits;
-            hasCredits = true;
-        }
         refreshCachedRates();
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastSparklineSampleMs >= SPARKLINE_INTERVAL_MS) {
@@ -269,6 +306,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
             currentShards = snap.shards;
             if (sessionActive) shardsEarned.observeBalance(snap.shards);
         }
+        if (snap.hasCredits) {
+            currentCredits = snap.credits;
+            hasCredits = true;
+            lastCreditsSeenMs = System.currentTimeMillis();
+            if (sessionActive) creditsEarned.observeBalance(snap.credits);
+        } else if (hasCredits && System.currentTimeMillis() - lastCreditsSeenMs >= CREDITS_STALE_MS) {
+            hasCredits = false;
+        }
         if (snap.hasSwings) {
             currentSwings = snap.swings;
             if (sessionActive) swingsEarned.observeBalance(snap.swings);
@@ -280,6 +325,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
         cachedSessionEssence = essenceEarned.earned();
         cachedSessionShards = shardsEarned.earned();
         cachedSessionSwings = swingsEarned.earned();
+        cachedSessionCredits = creditsEarned.earned();
         cachedActiveMs = grindElapsedMs();
         double activeHours = cachedActiveMs / 3_600_000.0;
         if (cachedActiveMs >= RATE_WARMUP_MS && activeHours > 0) {
@@ -287,11 +333,13 @@ public final class EmcStatsScoreboard implements StatCardSource {
             cachedEssencePerHour = cachedSessionEssence / activeHours;
             cachedShardsPerHour = cachedSessionShards / activeHours;
             cachedSwingsPerHour = cachedSessionSwings / activeHours;
+            cachedCreditsPerHour = cachedSessionCredits / activeHours;
         } else {
             cachedSoulsPerHour = 0.0;
             cachedEssencePerHour = 0.0;
             cachedShardsPerHour = 0.0;
             cachedSwingsPerHour = 0.0;
+            cachedCreditsPerHour = 0.0;
         }
     }
 
@@ -322,10 +370,12 @@ public final class EmcStatsScoreboard implements StatCardSource {
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();
+        creditsEarned.reset();
         swingsEarned.reset();
         cachedSessionSouls = 0.0;
         cachedSessionEssence = 0.0;
         cachedSessionShards = 0.0;
+        cachedSessionCredits = 0.0;
         cachedSessionSwings = 0.0;
     }
 
@@ -389,7 +439,6 @@ public final class EmcStatsScoreboard implements StatCardSource {
         addIf(progression, HudStat.SWINGS, new StatRow("Session swings", formatMoney(cachedSessionSwings)));
         addIf(progression, HudStat.SWINGS, new StatRow("Swings/hr", formatRate(cachedSwingsPerHour, cachedActiveMs)));
         addIf(progression, HudStat.REBIRTH, new StatRow("Rebirth", rebirthLevel >= 0 ? String.valueOf(rebirthLevel) : "N/A"));
-        addIf(progression, HudStat.CREDITS, new StatRow("Credits", hasCredits ? formatMoney(currentCredits) : "N/A"));
         appendGroup(rows, progression);
         return rows;
     }
@@ -414,6 +463,11 @@ public final class EmcStatsScoreboard implements StatCardSource {
             rows.add(new StatRow("Shards/hr", formatRate(cachedShardsPerHour, cachedActiveMs)));
             rows.add(new StatRow("Session shards", formatMoney(cachedSessionShards)));
         }
+        if (isHudStatVisible(HudStat.CREDITS)) {
+            rows.add(new StatRow("Credits", hasCredits ? formatMoney(currentCredits) : "N/A"));
+            rows.add(new StatRow("Credits/hr", formatRate(cachedCreditsPerHour, cachedActiveMs)));
+            rows.add(new StatRow("Session credits", formatMoney(cachedSessionCredits)));
+        }
     }
 
     private void addIf(List<StatRow> rows, HudStat stat, StatRow row) {
@@ -422,6 +476,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     private double graphMade() {
         switch (graphCurrency) {
+            case CREDITS: return creditsEarned.earned();
             case ESSENCE: return essenceEarned.earned();
             case SHARDS: return shardsEarned.earned();
             case SOULS:
@@ -437,12 +492,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
         sparklineBuffer[sparklineHead] = sessionMade;
         sparklineHead = (sparklineHead + 1) % SPARKLINE_CAPACITY;
         if (sparklineCount < SPARKLINE_CAPACITY) sparklineCount++;
+        sparklineVersion++;
     }
 
     private void clearSparkline() {
         sparklineCount = 0;
         sparklineHead = 0;
         lastSparklineSampleMs = 0;
+        sparklineVersion++;
     }
 
     /** Placeholder until Gens / Factories / Skyblock / Prisons have their own stats. */

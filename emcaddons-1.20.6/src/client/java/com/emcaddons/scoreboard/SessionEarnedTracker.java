@@ -6,11 +6,14 @@ package com.emcaddons.scoreboard;
  * sample confirms it did not drop; confirmed increases are added to {@code earned}.
  */
 public final class SessionEarnedTracker {
+    private static final long BASELINE_WARMUP_MS = 2000L;
+
     private double accepted;
     private double pending;
     private double earned;
     private boolean hasBaseline;
     private long lastSampleMs;
+    private long firstSeenMs;
 
     public void reset() {
         accepted = 0.0;
@@ -18,17 +21,20 @@ public final class SessionEarnedTracker {
         earned = 0.0;
         hasBaseline = false;
         lastSampleMs = 0L;
+        firstSeenMs = 0L;
     }
 
     /**
-     * Record an observed wallet/scoreboard balance. First call only sets the
-     * baseline. Later samples closer than 1000 ms to the last accepted sample
-     * are ignored.
+     * Record an observed wallet/scoreboard balance. The first observation starts
+     * a 2s warmup; the baseline is the balance seen after that delay. Later
+     * samples closer than 1000 ms to the last accepted sample are ignored.
      */
     public void observeBalance(double newBalance) {
         if (Double.isNaN(newBalance) || Double.isInfinite(newBalance)) return;
         long now = System.currentTimeMillis();
         if (!hasBaseline) {
+            if (firstSeenMs == 0L) firstSeenMs = now;
+            if (now - firstSeenMs < BASELINE_WARMUP_MS) return;
             accepted = newBalance;
             pending = newBalance;
             hasBaseline = true;

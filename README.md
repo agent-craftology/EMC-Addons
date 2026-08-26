@@ -9,7 +9,7 @@ Current release: **1.0**.
 ## Features
 
 - Click GUI with **HOME** (Modules) and **CONFIGURATION** (Settings, Config)
-- HUD cards for **Souls**, **Essence**, **Shards**, **Credits**, **Money**, **Swings**, **Rebirth**, **Grind Time**, plus a sparkline **Graph**
+- HUD cards for **Souls**, **Essence**, **Shards**, **Credits**, **Money**, **Swings**, **Rebirth**, **Grind Time**, plus a sparkline **Graph**, and a **Zone** card that shows Zone and Stage from nearby dungeon mob custom names and floating text displays
 - Named config profiles under `.minecraft/config/emcaddons/`
 - Client-only `/config` commands that are never sent to the server
 - Shareable `.cbshare` packs (ZIP + manifest) for the same Minecraft version
@@ -71,6 +71,7 @@ HUD tracker controls live on **Modules → Dungeons**. Stats are read from the E
 - **Rebirth**
 - **Grind Time** — how long you have been grinding this session (`45s`, `12m 05s`, or `1h 23m 45s`)
 - **Graph** — a sparkline of session progress for one of the five currencies
+- **Zone** — a separate card for Zone and Stage inferred from nearby dungeon mob custom names and floating text displays (for example `[RARE] LVL1 Chicken`)
 
 Tracker controls on **Modules → Dungeons**:
 

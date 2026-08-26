@@ -5,10 +5,53 @@ import com.emcaddons.gui.clickgui.GuiTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class StatCard {
     public static final int RADIUS = 8;
+
+    /**
+     * Trades sparkline fidelity for draw calls. Lower settings widen each sampled column,
+     * swap the per-column gradient for a flat fill and square off the track, which lets
+     * {@link GuiDraw#fillRoundRect} collapse to a single quad instead of one per scanline.
+     */
+    public enum GraphQuality {
+        HIGH("High", 1, 1, true, 4, true),
+        MEDIUM("Medium", 2, 3, true, 4, true),
+        LOW("Low", 4, 4, false, 0, false);
+
+        public final String displayName;
+        final int columnStep;
+        /** Snapping the line to every Nth row merges far more columns than widening them. */
+        final int yQuantize;
+        final boolean gradientArea;
+        final int trackRadius;
+        final boolean headDot;
+
+        GraphQuality(String displayName, int columnStep, int yQuantize, boolean gradientArea,
+                     int trackRadius, boolean headDot) {
+            this.displayName = displayName;
+            this.columnStep = columnStep;
+            this.yQuantize = yQuantize;
+            this.gradientArea = gradientArea;
+            this.trackRadius = trackRadius;
+            this.headDot = headDot;
+        }
+
+        public static String[] displayNames() {
+            GraphQuality[] all = values();
+            String[] names = new String[all.length];
+            for (int i = 0; i < all.length; i++) names[i] = all[i].displayName;
+            return names;
+        }
+
+        public static GraphQuality fromIndex(int index) {
+            GraphQuality[] all = values();
+            return index >= 0 && index < all.length ? all[index] : HIGH;
+        }
+    }
 
     private static final int PAD_LEFT = 10;
     private static final int PAD_RIGHT = 10;
@@ -31,7 +74,26 @@ public final class StatCard {
     /** Breathing room between the sparkline and the first stat row below it. */
     private static final int GRAPH_GAP = 4;
 
+    /** Sparkline geometry per card id, rebuilt only when the data, width or quality changes. */
+    private static final Map<String, SparkCache> SPARK_CACHE = new HashMap<>();
+
     private StatCard() {}
+
+    /**
+     * Run-length encoded sparkline columns. Coordinates are relative to the graph box so the
+     * cache survives the card being dragged around.
+     */
+    private static final class SparkCache {
+        int version = Integer.MIN_VALUE;
+        int width = -1;
+        int quality = -1;
+        int[] runX = new int[0];
+        int[] runW = new int[0];
+        int[] runY = new int[0];
+        int runCount;
+        int lastLineY;
+        boolean flat;
+    }
 
     public static int width(Font tr, StatCardSource source, boolean advanced) {
         int titleW = tr.width(source.title());
@@ -153,8 +215,55 @@ public final class StatCard {
         }
         double[] values = source.sparklineValues();
         if (values == null || values.length == 0 || w <= 0) return;
+        GraphQuality quality = quality(source);
         int graphY = y + GRAPH_LABEL_H;
-        GuiDraw.fillRoundRect(ctx, x, graphY, w, GRAPH_H, 4, GuiTheme.TRACK);
+        GuiDraw.fillRoundRect(ctx, x, graphY, w, GRAPH_H, quality.trackRadius, GuiTheme.TRACK);
+
+        SparkCache cache = SPARK_CACHE.computeIfAbsent(source.id(), id -> new SparkCache());
+        int version = source.sparklineVersion();
+        if (cache.version != version || cache.width != w || cache.quality != quality.ordinal()) {
+            buildSparkCache(cache, values, w, quality);
+            cache.version = version;
+            cache.width = w;
+            cache.quality = quality.ordinal();
+        }
+
+        int accent = source.accentColor();
+        if (cache.flat) {
+            GuiDraw.fill(ctx, x, graphY + GRAPH_H / 2, w, 1, accent);
+            return;
+        }
+        int graphBottom = graphY + GRAPH_H;
+        int areaTop = (accent & 0x00FFFFFF) | 0x55000000;
+        int areaBottom = accent & 0x00FFFFFF;
+        int areaFlat = (accent & 0x00FFFFFF) | 0x2A000000;
+        for (int i = 0; i < cache.runCount; i++) {
+            int rx = x + cache.runX[i];
+            int ry = graphY + cache.runY[i];
+            int rw = cache.runW[i];
+            if (quality.gradientArea) {
+                GuiDraw.vGradient(ctx, rx, ry, rw, graphBottom - ry, areaTop, areaBottom);
+            } else {
+                GuiDraw.fill(ctx, rx, ry, rw, graphBottom - ry, areaFlat);
+            }
+            GuiDraw.fill(ctx, rx, ry, rw, 2, accent);
+        }
+        if (quality.headDot) {
+            int hx = Math.max(x, Math.min(x + w - 5, x + w - 1 - 2));
+            int hy = Math.max(graphY, Math.min(graphBottom - 5, graphY + cache.lastLineY - 2));
+            GuiDraw.fillRoundRect(ctx, hx, hy, 5, 5, 2, accent);
+        }
+    }
+
+    private static GraphQuality quality(StatCardSource source) {
+        GraphQuality quality = source.graphQuality();
+        return quality != null ? quality : GraphQuality.HIGH;
+    }
+
+    private static void buildSparkCache(SparkCache cache, double[] values, int w, GraphQuality quality) {
+        cache.runCount = 0;
+        cache.flat = false;
+        cache.lastLineY = GRAPH_H / 2;
         int n = values.length;
         double min = values[0];
         double max = values[0];
@@ -162,31 +271,40 @@ public final class StatCard {
             if (values[i] < min) min = values[i];
             if (values[i] > max) max = values[i];
         }
-        int accent = source.accentColor();
         if (max == min) {
-            GuiDraw.fill(ctx, x, graphY + GRAPH_H / 2, w, 1, accent);
+            cache.flat = true;
             return;
         }
         double range = max - min;
-        int areaTop = (accent & 0x00FFFFFF) | 0x55000000;
-        int areaBottom = accent & 0x00FFFFFF;
-        int lastLineY = graphY + GRAPH_H / 2;
-        int graphBottom = graphY + GRAPH_H;
-        for (int px = 0; px < w; px++) {
+        int step = Math.max(1, quality.columnStep);
+        int capacity = (w + step - 1) / step;
+        if (cache.runX.length < capacity) {
+            cache.runX = new int[capacity];
+            cache.runW = new int[capacity];
+            cache.runY = new int[capacity];
+        }
+        int previousY = Integer.MIN_VALUE;
+        for (int px = 0; px < w; px += step) {
+            int columnW = Math.min(step, w - px);
             double idx = (w <= 1) ? (n - 1) : px / (double) (w - 1) * (n - 1);
             int i0 = (int) Math.floor(idx);
             int i1 = Math.min(n - 1, i0 + 1);
             double frac = idx - i0;
             double sample = values[i0] + (values[i1] - values[i0]) * frac;
             double t = (sample - min) / range;
-            int lineY = graphY + (int) Math.round((1.0 - t) * (GRAPH_H - 1));
-            lineY = Math.max(graphY, Math.min(graphBottom - 2, lineY));
-            GuiDraw.vGradient(ctx, x + px, lineY, 1, graphBottom - lineY, areaTop, areaBottom);
-            GuiDraw.fill(ctx, x + px, lineY, 1, 2, accent);
-            lastLineY = lineY;
+            int lineY = (int) Math.round((1.0 - t) * (GRAPH_H - 1));
+            if (quality.yQuantize > 1) lineY = (lineY / quality.yQuantize) * quality.yQuantize;
+            lineY = Math.max(0, Math.min(GRAPH_H - 2, lineY));
+            if (lineY == previousY && cache.runCount > 0) {
+                cache.runW[cache.runCount - 1] += columnW;
+            } else {
+                cache.runX[cache.runCount] = px;
+                cache.runW[cache.runCount] = columnW;
+                cache.runY[cache.runCount] = lineY;
+                cache.runCount++;
+                previousY = lineY;
+            }
+            cache.lastLineY = lineY;
         }
-        int hx = Math.max(x, Math.min(x + w - 5, x + w - 1 - 2));
-        int hy = Math.max(graphY, Math.min(graphBottom - 5, lastLineY - 2));
-        GuiDraw.fillRoundRect(ctx, hx, hy, 5, 5, 2, accent);
     }
 }

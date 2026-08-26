@@ -7,8 +7,11 @@ import com.emcaddons.gui.WindowIcon;
 import com.emcaddons.gui.clickgui.ClickGuiScreen;
 import com.emcaddons.gui.clickgui.GuiScale;
 import com.emcaddons.gui.clickgui.GuiTheme;
+import com.emcaddons.scoreboard.DungeonZoneScoreboard;
+import com.emcaddons.scoreboard.EmcSidebar;
 import com.emcaddons.scoreboard.EmcStatsScoreboard;
 import com.emcaddons.scoreboard.HudLayoutManager;
+import com.emcaddons.scoreboard.StatCard;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -21,8 +24,11 @@ import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.command.CommandSource;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.decoration.DisplayEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.Box;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.File;
@@ -31,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Properties;
 
 public class EmcAddonsClient implements ClientModInitializer {
@@ -53,7 +60,9 @@ public class EmcAddonsClient implements ClientModInitializer {
     private ConfigProfileManager configProfileManager;
     private final HudLayoutManager hudLayoutManager = new HudLayoutManager();
     private final EmcStatsScoreboard emcStatsScoreboard = new EmcStatsScoreboard();
+    private final DungeonZoneScoreboard dungeonZoneScoreboard = new DungeonZoneScoreboard();
     private EmcStatsScoreboard.Currency hudCurrencyGraph = EmcStatsScoreboard.Currency.SOULS;
+    private StatCard.GraphQuality hudGraphQuality = StatCard.GraphQuality.HIGH;
     private Properties lastHudProperties;
     private Properties pendingHudSettings;
     private GuiTheme.Theme guiTheme = GuiTheme.Theme.EMERALD;
@@ -77,6 +86,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         loadSettings();
 
         hudLayoutManager.register(emcStatsScoreboard, 6, 6);
+        hudLayoutManager.register(dungeonZoneScoreboard, 6, 90);
         applyHudCurrencySettings();
         if (pendingHudSettings != null) {
             hudLayoutManager.deserialize(pendingHudSettings);
@@ -145,6 +155,12 @@ public class EmcAddonsClient implements ClientModInitializer {
                         return 1;
                     })
             );
+            dispatcher.register(ClientCommandManager.literal("emczone")
+                    .then(ClientCommandManager.literal("debug")
+                            .executes(ctx -> {
+                                dumpEmcZoneDebug();
+                                return 1;
+                            })));
         });
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> WindowIcon.apply(client, isWindowIconEnabled()));
@@ -154,6 +170,7 @@ public class EmcAddonsClient implements ClientModInitializer {
                 MinecraftClient client = MinecraftClient.getInstance();
                 if (client.world == null || client.player == null) return;
                 emcStatsScoreboard.update(client);
+                dungeonZoneScoreboard.update(client);
                 if (!hudLayoutManager.isMasterVisible()) return;
                 hudLayoutManager.renderAll(drawContext);
             } catch (Exception e) {
@@ -488,6 +505,32 @@ public class EmcAddonsClient implements ClientModInitializer {
         });
     }
 
+    private void dumpEmcZoneDebug() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null || client.player == null) {
+            sendPlayerMessage("§cNot in a world.");
+            return;
+        }
+        EmcSidebar.Snapshot snap = EmcSidebar.read(client);
+        sendPlayerMessage("§eSidebar location: §f" + snap.location);
+        Box box = client.player.getBoundingBox().expand(DungeonZoneScoreboard.SCAN_RANGE);
+        List<Entity> entities = client.world.getEntitiesByClass(
+                Entity.class, box, entity -> entity != client.player);
+        sendPlayerMessage("§eNearby entities (" + entities.size() + "):");
+        for (Entity entity : entities) {
+            String type = String.valueOf(entity.getType());
+            String custom = entity.getCustomName() != null ? entity.getCustomName().getString() : "-";
+            String display = "-";
+            if (entity instanceof DisplayEntity.TextDisplayEntity textDisplay) {
+                DisplayEntity.TextDisplayEntity.Data data = textDisplay.getData();
+                if (data != null && data.text() != null) {
+                    display = data.text().getString();
+                }
+            }
+            sendPlayerMessage("§7" + type + " §fcustom=" + custom + " §bdisplay=" + display);
+        }
+    }
+
     private boolean loadProfile(String name) {
         if (configProfileManager.listProfiles().stream().noneMatch(p -> p.equals(name))) {
             return false;
@@ -532,6 +575,15 @@ public class EmcAddonsClient implements ClientModInitializer {
             }
         }
         emcStatsScoreboard.setGraphCurrency(graph);
+        StatCard.GraphQuality quality = hudGraphQuality != null ? hudGraphQuality : StatCard.GraphQuality.HIGH;
+        if (lastHudProperties != null) {
+            String stored = lastHudProperties.getProperty("hud.graph.quality", quality.name());
+            try {
+                quality = StatCard.GraphQuality.valueOf(stored.trim());
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        emcStatsScoreboard.setGraphQuality(quality);
     }
 
     private void loadSettings() {
@@ -586,6 +638,12 @@ public class EmcAddonsClient implements ClientModInitializer {
         } catch (IllegalArgumentException ignored) {
             hudCurrencyGraph = EmcStatsScoreboard.Currency.SOULS;
         }
+        String hudQuality = map.getProperty("hud.graph.quality", "HIGH");
+        try {
+            hudGraphQuality = StatCard.GraphQuality.valueOf(hudQuality.trim());
+        } catch (IllegalArgumentException ignored) {
+            hudGraphQuality = StatCard.GraphQuality.HIGH;
+        }
         applyHudCurrencySettings();
         if (hudLayoutManager.getCards().isEmpty()) {
             pendingHudSettings = map;
@@ -611,6 +669,9 @@ public class EmcAddonsClient implements ClientModInitializer {
         EmcStatsScoreboard.Currency graphCurrency = emcStatsScoreboard.getGraphCurrency();
         if (graphCurrency == null) graphCurrency = EmcStatsScoreboard.Currency.SOULS;
         p.setProperty("hud.currency.graph", graphCurrency.name());
+        StatCard.GraphQuality graphQuality = emcStatsScoreboard.getGraphQuality();
+        if (graphQuality == null) graphQuality = StatCard.GraphQuality.HIGH;
+        p.setProperty("hud.graph.quality", graphQuality.name());
         hudLayoutManager.serialize(p);
         if (configProfileManager != null) {
             configProfileManager.saveActiveSettings(p);

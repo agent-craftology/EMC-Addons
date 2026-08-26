@@ -35,15 +35,14 @@ public final class GuiDraw {
             fill(ctx, x, y, w, h, color);
             return;
         }
-        for (int i = 0; i < h; i++) {
-            int inset = 0;
-            if (i < r) {
-                int dy = r - i;
-                inset = r - roundSqrt(r, dy);
-            } else if (i >= h - r) {
-                int dy = i - (h - r - 1);
-                inset = r - roundSqrt(r, dy);
-            }
+        // Only the corner bands need per-scanline insets; the middle is one quad.
+        for (int i = 0; i < r; i++) {
+            int inset = r - roundSqrt(r, r - i);
+            fill(ctx, x + inset, y + i, w - inset * 2, 1, color);
+        }
+        fill(ctx, x, y + r, w, h - r * 2, color);
+        for (int i = h - r; i < h; i++) {
+            int inset = r - roundSqrt(r, i - (h - r - 1));
             fill(ctx, x + inset, y + i, w - inset * 2, 1, color);
         }
     }

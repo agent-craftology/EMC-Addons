@@ -21,6 +21,14 @@ public interface StatCardSource {
 
     default double[] sparklineValues() { return null; }
 
+    /**
+     * Changes whenever {@link #sparklineValues()} would return different data. Lets the
+     * renderer cache derived geometry instead of rebuilding it every frame.
+     */
+    default int sparklineVersion() { return 0; }
+
+    default StatCard.GraphQuality graphQuality() { return StatCard.GraphQuality.HIGH; }
+
     default String sparklineLabel() { return ""; }
 
     default boolean showIcon() { return true; }

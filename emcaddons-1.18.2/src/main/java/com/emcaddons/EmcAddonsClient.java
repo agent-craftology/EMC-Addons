@@ -7,8 +7,12 @@ import com.emcaddons.gui.WindowIcon;
 import com.emcaddons.gui.clickgui.ClickGuiScreen;
 import com.emcaddons.gui.clickgui.GuiScale;
 import com.emcaddons.gui.clickgui.GuiTheme;
+import com.emcaddons.scoreboard.DungeonZoneScoreboard;
+import com.emcaddons.scoreboard.EmcSidebar;
 import com.emcaddons.scoreboard.EmcStatsScoreboard;
 import com.emcaddons.scoreboard.HudLayoutManager;
+import com.emcaddons.scoreboard.NameplateText;
+import com.emcaddons.scoreboard.StatCard;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v1.ClientCommandManager;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -19,10 +23,13 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.command.CommandSource;
+import net.minecraft.entity.Entity;
 import net.minecraft.text.LiteralText;
+import net.minecraft.util.registry.Registry;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.File;
+import java.util.List;
 import java.util.Properties;
 
 public class EmcAddonsClient implements ClientModInitializer {
@@ -44,6 +51,7 @@ public class EmcAddonsClient implements ClientModInitializer {
     private boolean windowIconEnabled = true;
     private final HudLayoutManager hudLayoutManager = new HudLayoutManager();
     private final EmcStatsScoreboard emcStats = new EmcStatsScoreboard();
+    private final DungeonZoneScoreboard dungeonZoneScoreboard = new DungeonZoneScoreboard();
     private GuiTheme.Theme guiTheme = GuiTheme.Theme.EMERALD;
     private int guiOpacity = GuiTheme.OPACITY_DEFAULT;
     private int hudOpacity = GuiTheme.OPACITY_DEFAULT;
@@ -66,6 +74,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         loadSettings();
 
         hudLayoutManager.register(emcStats, 6, 6);
+        hudLayoutManager.register(dungeonZoneScoreboard, 6, 90);
         if (lastLoadedSettings != null) {
             hudLayoutManager.deserialize(lastLoadedSettings);
             applyEmcStatsHud(lastLoadedSettings);
@@ -157,6 +166,18 @@ public class EmcAddonsClient implements ClientModInitializer {
             })
         );
 
+        ClientCommandManager.DISPATCHER.register(ClientCommandManager.literal("emczone")
+            .then(ClientCommandManager.literal("debug")
+                .executes(ctx -> {
+                    handleOutgoingChatMessage("/emczone debug");
+                    return 1;
+                }))
+            .executes(ctx -> {
+                sendPlayerMessage("§eUsage: /emczone debug");
+                return 1;
+            })
+        );
+
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> WindowIcon.apply(client, isWindowIconEnabled()));
 
         HudRenderCallback.EVENT.register((matrixStack, tickDelta) -> {
@@ -164,6 +185,7 @@ public class EmcAddonsClient implements ClientModInitializer {
                 MinecraftClient client = MinecraftClient.getInstance();
                 if (client.world == null || client.player == null) return;
                 emcStats.update(client);
+                dungeonZoneScoreboard.update(client);
                 hudLayoutManager.renderAll(matrixStack);
             } catch (Exception e) {
                 System.err.println("EMC Addons: Error rendering HUD: " + e.getMessage());
@@ -173,6 +195,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             try {
                 emcStats.update(client);
+                dungeonZoneScoreboard.update(client);
                 while (guiKeyBinding.wasPressed()) {
                     if (client.world != null && client.player != null) {
                         client.setScreen(new ClickGuiScreen(this));
@@ -270,6 +293,10 @@ public class EmcAddonsClient implements ClientModInitializer {
 
     public EmcStatsScoreboard getEmcStatsScoreboard() {
         return emcStats;
+    }
+
+    public DungeonZoneScoreboard getDungeonZoneScoreboard() {
+        return dungeonZoneScoreboard;
     }
 
     public GuiTheme.Theme getGuiTheme() {
@@ -468,7 +495,12 @@ public class EmcAddonsClient implements ClientModInitializer {
     public boolean handleOutgoingChatMessage(String message) {
         if (message == null) return false;
         String trimmed = message.trim();
-        if (!trimmed.toLowerCase().startsWith("/config")) return false;
+        String lower = trimmed.toLowerCase();
+        if (lower.startsWith("/emczone")) {
+            handleEmcZoneCommand(trimmed);
+            return true;
+        }
+        if (!lower.startsWith("/config")) return false;
         String[] parts = trimmed.split("\\s+");
         if (parts.length < 2) {
             sendPlayerMessage("§eUsage: /config <create|list|delete|load|export|import> [name]");
@@ -531,6 +563,36 @@ public class EmcAddonsClient implements ClientModInitializer {
         }
     }
 
+    private void handleEmcZoneCommand(String trimmed) {
+        String[] parts = trimmed.split("\\s+");
+        if (parts.length < 2 || !parts[1].equalsIgnoreCase("debug")) {
+            sendPlayerMessage("§eUsage: /emczone debug");
+            return;
+        }
+        dumpZoneDebug();
+    }
+
+    private void dumpZoneDebug() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null || client.player == null) {
+            sendPlayerMessage("§cNot in a world");
+            return;
+        }
+        EmcSidebar.Snapshot snap = EmcSidebar.read(client);
+        EmcSidebar.Location location = snap == null ? EmcSidebar.Location.UNKNOWN : snap.location;
+        sendPlayerMessage("§e[emczone] location=" + location);
+        List<Entity> entities = client.world.getEntitiesByClass(
+                Entity.class,
+                client.player.getBoundingBox().expand(24.0),
+                entity -> entity != client.player);
+        sendPlayerMessage("§e[emczone] nearby=" + entities.size());
+        for (Entity entity : entities) {
+            String type = Registry.ENTITY_TYPE.getId(entity.getType()).toString();
+            String name = NameplateText.of(entity).orElse("-");
+            sendPlayerMessage("§7  " + type + " §f" + name);
+        }
+    }
+
     private boolean loadProfile(String name) {
         if (configProfileManager.listProfiles().stream().noneMatch(p -> p.equals(name))) {
             return false;
@@ -556,6 +618,15 @@ public class EmcAddonsClient implements ClientModInitializer {
             }
         }
         emcStats.setGraphCurrency(graph);
+        StatCard.GraphQuality quality = StatCard.GraphQuality.HIGH;
+        String qualityValue = map.getProperty("hud.graph.quality");
+        if (qualityValue != null && !qualityValue.isEmpty()) {
+            try {
+                quality = StatCard.GraphQuality.valueOf(qualityValue.trim());
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        emcStats.setGraphQuality(quality);
     }
 
     private void loadSettings() {
@@ -634,6 +705,8 @@ public class EmcAddonsClient implements ClientModInitializer {
         emcStats.saveHudVisibility(p);
         EmcStatsScoreboard.Currency graph = emcStats.getGraphCurrency();
         p.setProperty("hud.currency.graph", graph != null ? graph.name() : "SOULS");
+        StatCard.GraphQuality graphQuality = emcStats.getGraphQuality();
+        p.setProperty("hud.graph.quality", graphQuality != null ? graphQuality.name() : "HIGH");
         if (configProfileManager != null) {
             configProfileManager.saveActiveSettings(p);
         }

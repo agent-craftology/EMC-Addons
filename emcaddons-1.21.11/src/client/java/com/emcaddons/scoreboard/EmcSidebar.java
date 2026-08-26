@@ -74,8 +74,12 @@ public final class EmcSidebar {
                     hasShardsPos = true;
                     break;
                 case SCORE_CREDITS:
-                    creditsPos = parseAmount(text);
-                    hasCreditsPos = true;
+                    if (lower.contains("credits")) {
+                        creditsPos = parseAmount(text);
+                        hasCreditsPos = true;
+                    } else {
+                        assignedByPosition = false;
+                    }
                     break;
                 case SCORE_SWINGS:
                     swingsPos = parseAmount(text);
@@ -190,6 +194,7 @@ public final class EmcSidebar {
 
     public static double parseAmount(String text) {
         if (text == null || text.isEmpty()) return 0.0;
+        text = normalizeSmallCaps(text);
         text = text.replaceAll("§.", "").replace("$", "").replace(",", "").trim();
 
         Pattern decimalPattern = Pattern.compile("(\\d+\\.\\d+)\\s*([KMBTkmbt])");

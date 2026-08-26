@@ -6,6 +6,7 @@ import com.emcaddons.config.ConfigProfileManager;
 import com.emcaddons.config.ConfigShare;
 import com.emcaddons.scoreboard.EmcStatsScoreboard;
 import com.emcaddons.scoreboard.HudLayoutManager;
+import com.emcaddons.scoreboard.StatCard;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
@@ -243,6 +244,7 @@ public class ClickGuiScreen extends Screen {
                         mod.persistHudLayout();
                     }));
             rows.add(hudVisibleToggle("EMC Stats card visible", "emcstats"));
+            rows.add(hudVisibleToggle("Zone card visible", "dungeonzone"));
             rows.add(hudAdvancedToggle("Advanced stats", "emcstats"));
             rows.add(new SettingRow.Button("EMC Stats rows", () -> setPage(Page.SETTINGS_ROWS)));
         }
@@ -272,6 +274,16 @@ public class ClickGuiScreen extends Screen {
                     EmcStatsScoreboard.Currency current = sb.getGraphCurrency();
                     int idx = current == null ? 0 : current.ordinal();
                     sb.setGraphCurrency(all[(idx + 1) % all.length]);
+                    mod.persistHudLayout();
+                }));
+        rows.add(new SettingRow.Cycle("Graph quality",
+                () -> graphQualityLabel(sb),
+                () -> {
+                    if (sb == null) return;
+                    StatCard.GraphQuality[] all = StatCard.GraphQuality.values();
+                    StatCard.GraphQuality current = sb.getGraphQuality();
+                    int idx = current == null ? 0 : current.ordinal();
+                    sb.setGraphQuality(all[(idx + 1) % all.length]);
                     mod.persistHudLayout();
                 }));
     }
@@ -311,6 +323,11 @@ public class ClickGuiScreen extends Screen {
         if (currency == null) currency = EmcStatsScoreboard.Currency.values()[0];
         String name = currency.name();
         return name.charAt(0) + name.substring(1).toLowerCase(Locale.ROOT);
+    }
+
+    private static String graphQualityLabel(EmcStatsScoreboard sb) {
+        StatCard.GraphQuality quality = sb != null ? sb.getGraphQuality() : null;
+        return quality != null ? quality.displayName : StatCard.GraphQuality.HIGH.displayName;
     }
 
     @Override

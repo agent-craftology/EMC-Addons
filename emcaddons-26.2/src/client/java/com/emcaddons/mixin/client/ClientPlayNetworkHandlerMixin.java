@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.emcaddons.EmcAddonsClient;
 
 /**
- * Intercepts outgoing chat so {@code /config} never reaches the server.
+ * Intercepts outgoing chat so {@code /config} and {@code /emczone} never reach the server.
  */
 @Mixin(ClientPacketListener.class)
 public class ClientPlayNetworkHandlerMixin {
