@@ -96,6 +96,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     public void resetSession() {
+        // Session/rate/sparkline only — do not clear currentCredits/hasCredits (live wallet).
         resetEarnedTrackers();
         clearSparkline();
         resetGrindTime();
@@ -202,6 +203,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
             soulsPerHourText = formatMoney(sessionSoulsMade / hours);
             essencePerHourText = formatMoney(sessionEssenceMade / hours);
             shardsPerHourText = formatMoney(sessionShardsMade / hours);
+            // Credits/hr is session earnings / grind hours — never currentCredits / time.
             creditsPerHourText = formatMoney(sessionCreditsMade / hours);
             swingsPerHourText = formatMoney(sessionSwingsMade / hours);
         } else {
@@ -348,10 +350,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
         }
         long now = System.currentTimeMillis();
         if (snap.hasCredits) {
+            // Credits HUD copies the live wallet like Rebirth; never feed it into /hr.
             currentCredits = snap.credits;
             hasCredits = true;
             lastCreditsSeenMs = now;
-            creditsEarned.observeBalance(snap.credits);
+            // Session/rate only. Skip 0 so a missing parse cannot become baseline or a fake spend.
+            if (snap.credits != 0.0) {
+                creditsEarned.observeBalance(snap.credits);
+            }
         } else if (hasCredits && lastCreditsSeenMs > 0L && now - lastCreditsSeenMs >= CREDITS_STALE_MS) {
             hasCredits = false;
         }
@@ -405,6 +411,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void resetEarnedTrackers() {
+        // Session credits and Credits/hr only; currentCredits/hasCredits stay as the live wallet.
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();

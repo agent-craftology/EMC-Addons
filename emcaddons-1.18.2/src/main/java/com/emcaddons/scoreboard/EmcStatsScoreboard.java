@@ -242,6 +242,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     /**
      * Clears dungeon session earned, rates, sparkline, and grind time.
      * Does not run automatically on world/server changes.
+     * Does not clear currentCredits / hasCredits (live wallet, like Rebirth).
      */
     public void resetSession() {
         resetSession(GameMode.DUNGEONS);
@@ -307,10 +308,12 @@ public final class EmcStatsScoreboard implements StatCardSource {
             if (sessionActive) shardsEarned.observeBalance(snap.shards);
         }
         if (snap.hasCredits) {
+            // Live Credits row: copy sidebar wallet like Rebirth. Never feed this into /hr.
             currentCredits = snap.credits;
             hasCredits = true;
             lastCreditsSeenMs = System.currentTimeMillis();
-            if (sessionActive) creditsEarned.observeBalance(snap.credits);
+            // Session credits / Credits/hr only; skip 0 so a missing parse cannot become the baseline or a fake spend.
+            if (sessionActive && snap.credits != 0.0) creditsEarned.observeBalance(snap.credits);
         } else if (hasCredits && System.currentTimeMillis() - lastCreditsSeenMs >= CREDITS_STALE_MS) {
             hasCredits = false;
         }
@@ -333,6 +336,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
             cachedEssencePerHour = cachedSessionEssence / activeHours;
             cachedShardsPerHour = cachedSessionShards / activeHours;
             cachedSwingsPerHour = cachedSessionSwings / activeHours;
+            // Credits/hr = session earned / grind hours — never currentCredits / time.
             cachedCreditsPerHour = cachedSessionCredits / activeHours;
         } else {
             cachedSoulsPerHour = 0.0;
@@ -370,12 +374,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();
+        // Session reset zeros session credits and Credits/hr, not the live Credits wallet.
         creditsEarned.reset();
         swingsEarned.reset();
         cachedSessionSouls = 0.0;
         cachedSessionEssence = 0.0;
         cachedSessionShards = 0.0;
         cachedSessionCredits = 0.0;
+        cachedCreditsPerHour = 0.0;
         cachedSessionSwings = 0.0;
     }
 

@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.input.KeyInput;
@@ -50,12 +51,14 @@ public class EmcAddonsClient implements ClientModInitializer {
     private KeyBinding hudToggleFactoriesBinding;
     private KeyBinding hudToggleSkyblockBinding;
     private KeyBinding hudTogglePrisonsBinding;
+    private KeyBinding hudToggleAdvancedBinding;
     private int guiOpenMenuKey = GLFW.GLFW_KEY_RIGHT_ALT;
     private int hudToggleDungeonsKey = 0;
     private int hudToggleGensKey = 0;
     private int hudToggleFactoriesKey = 0;
     private int hudToggleSkyblockKey = 0;
     private int hudTogglePrisonsKey = 0;
+    private int hudToggleAdvancedKey = 0;
     private File CONFIG_DIR;
     private ConfigProfileManager configProfileManager;
     private final HudLayoutManager hudLayoutManager = new HudLayoutManager();
@@ -105,6 +108,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         hudToggleFactoriesBinding = registerHudToggleBinding("key.emcaddons.toggle_factories", hudToggleFactoriesKey);
         hudToggleSkyblockBinding = registerHudToggleBinding("key.emcaddons.toggle_skyblock", hudToggleSkyblockKey);
         hudTogglePrisonsBinding = registerHudToggleBinding("key.emcaddons.toggle_prisons", hudTogglePrisonsKey);
+        hudToggleAdvancedBinding = registerHudToggleBinding("key.emcaddons.toggle_advanced", hudToggleAdvancedKey);
         KeyBinding.updateKeysByCode();
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
@@ -165,6 +169,9 @@ public class EmcAddonsClient implements ClientModInitializer {
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> WindowIcon.apply(client, isWindowIconEnabled()));
 
+        ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) ->
+                !dungeonZoneScoreboard.onGameMessage(message.getString()));
+
         HudElementRegistry.addLast(Identifier.of("emcaddons", "stats"), (drawContext, tickCounter) -> {
             try {
                 MinecraftClient client = MinecraftClient.getInstance();
@@ -180,6 +187,7 @@ public class EmcAddonsClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             try {
+                tickZoneResetQuery(client);
                 while (guiKeyBinding.wasPressed()) {
                     client.setScreen(new ClickGuiScreen(this));
                 }
@@ -188,6 +196,7 @@ public class EmcAddonsClient implements ClientModInitializer {
                 tickHudToggle(hudToggleFactoriesBinding, hudToggleFactoriesKey, "factories");
                 tickHudToggle(hudToggleSkyblockBinding, hudToggleSkyblockKey, "skyblock");
                 tickHudToggle(hudTogglePrisonsBinding, hudTogglePrisonsKey, "prisons");
+                tickAdvancedToggle();
                 if (guiKeyBinding != null) {
                     int controlKey = KeyBindingHelper.getBoundKeyOf(guiKeyBinding).getCode();
                     if (controlKey != guiOpenMenuKey) {
@@ -219,6 +228,11 @@ public class EmcAddonsClient implements ClientModInitializer {
                 int nextPrisons = readBoundKey(hudTogglePrisonsBinding);
                 if (nextPrisons != hudTogglePrisonsKey) {
                     hudTogglePrisonsKey = nextPrisons;
+                    hudKeysChanged = true;
+                }
+                int nextAdvanced = readBoundKey(hudToggleAdvancedBinding);
+                if (nextAdvanced != hudToggleAdvancedKey) {
+                    hudToggleAdvancedKey = nextAdvanced;
                     hudKeysChanged = true;
                 }
                 if (hudKeysChanged) saveSettings();
@@ -356,6 +370,16 @@ public class EmcAddonsClient implements ClientModInitializer {
         saveSettings();
     }
 
+    public int getHudToggleAdvancedKey() {
+        return hudToggleAdvancedKey;
+    }
+
+    public void setHudToggleAdvancedKey(int keyCode) {
+        this.hudToggleAdvancedKey = keyCode;
+        applyHudToggleBoundKey(hudToggleAdvancedBinding, hudToggleAdvancedKey);
+        saveSettings();
+    }
+
     public GuiTheme.Theme getGuiTheme() {
         return guiTheme;
     }
@@ -427,8 +451,23 @@ public class EmcAddonsClient implements ClientModInitializer {
         return emcStatsScoreboard;
     }
 
+    public DungeonZoneScoreboard getDungeonZoneScoreboard() {
+        return dungeonZoneScoreboard;
+    }
+
     public void persistHudLayout() {
         saveSettings();
+    }
+
+    private void tickZoneResetQuery(MinecraftClient client) {
+        HudLayoutManager.CardState zoneCard = hudLayoutManager.get("dungeonzone");
+        boolean zoneVisible = zoneCard != null && zoneCard.isVisible();
+        if (!dungeonZoneScoreboard.shouldSendQuery(client, hudLayoutManager.isMasterVisible(), zoneVisible)) {
+            return;
+        }
+        if (client.player == null || client.player.networkHandler == null) return;
+        client.player.networkHandler.sendChatCommand("zone reset");
+        dungeonZoneScoreboard.markQuerySent();
     }
 
     public boolean handleOutgoingChatMessage(String message) {
@@ -545,6 +584,7 @@ public class EmcAddonsClient implements ClientModInitializer {
             applyHudToggleBoundKey(hudToggleFactoriesBinding, hudToggleFactoriesKey);
             applyHudToggleBoundKey(hudToggleSkyblockBinding, hudToggleSkyblockKey);
             applyHudToggleBoundKey(hudTogglePrisonsBinding, hudTogglePrisonsKey);
+            applyHudToggleBoundKey(hudToggleAdvancedBinding, hudToggleAdvancedKey);
             KeyBinding.updateKeysByCode();
         }
         return true;
@@ -566,6 +606,7 @@ public class EmcAddonsClient implements ClientModInitializer {
 
     private void applyHudCurrencySettings() {
         emcStatsScoreboard.loadHudVisibility(lastHudProperties);
+        dungeonZoneScoreboard.loadHudVisibility(lastHudProperties);
         EmcStatsScoreboard.Currency graph = hudCurrencyGraph != null ? hudCurrencyGraph : EmcStatsScoreboard.Currency.SOULS;
         if (lastHudProperties != null) {
             String hudGraph = lastHudProperties.getProperty("hud.currency.graph", "SOULS");
@@ -605,6 +646,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         hudToggleFactoriesKey = parseKeyCode(map.getProperty("hudToggleKey.factories"), hudToggleFactoriesKey);
         hudToggleSkyblockKey = parseKeyCode(map.getProperty("hudToggleKey.skyblock"), hudToggleSkyblockKey);
         hudTogglePrisonsKey = parseKeyCode(map.getProperty("hudToggleKey.prisons"), hudTogglePrisonsKey);
+        hudToggleAdvancedKey = parseKeyCode(map.getProperty("hudToggleKey.advanced"), hudToggleAdvancedKey);
         String gt = map.getProperty("guiTheme");
         if (gt != null) {
             try {
@@ -660,12 +702,14 @@ public class EmcAddonsClient implements ClientModInitializer {
         p.setProperty("hudToggleKey.factories", String.valueOf(hudToggleFactoriesKey));
         p.setProperty("hudToggleKey.skyblock", String.valueOf(hudToggleSkyblockKey));
         p.setProperty("hudToggleKey.prisons", String.valueOf(hudTogglePrisonsKey));
+        p.setProperty("hudToggleKey.advanced", String.valueOf(hudToggleAdvancedKey));
         p.setProperty("guiTheme", guiTheme.name());
         p.setProperty("guiOpacity", String.valueOf(getGuiOpacity()));
         p.setProperty("clickGuiScale", String.format(java.util.Locale.ROOT, "%.2f", getClickGuiScale()));
         p.setProperty("windowIconEnabled", String.valueOf(windowIconEnabled));
         p.setProperty("scoreboardsEnabled", String.valueOf(hudLayoutManager.isMasterVisible()));
         emcStatsScoreboard.saveHudVisibility(p);
+        dungeonZoneScoreboard.saveHudVisibility(p);
         EmcStatsScoreboard.Currency graphCurrency = emcStatsScoreboard.getGraphCurrency();
         if (graphCurrency == null) graphCurrency = EmcStatsScoreboard.Currency.SOULS;
         p.setProperty("hud.currency.graph", graphCurrency.name());
@@ -702,6 +746,15 @@ public class EmcAddonsClient implements ClientModInitializer {
             if (storedKey == 0) continue;
             if (hudLayoutManager.get(cardId) == null) continue;
             hudLayoutManager.toggleCard(cardId);
+            persistHudLayout();
+        }
+    }
+
+    private void tickAdvancedToggle() {
+        if (hudToggleAdvancedBinding == null) return;
+        while (hudToggleAdvancedBinding.wasPressed()) {
+            if (hudToggleAdvancedKey == 0) continue;
+            hudLayoutManager.toggleAdvanced();
             persistHudLayout();
         }
     }

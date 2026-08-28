@@ -15,6 +15,7 @@ import com.emcaddons.gui.clickgui.widget.SettingRow;
 import com.emcaddons.gui.clickgui.widget.SliderRow;
 import com.emcaddons.gui.clickgui.widget.TextRow;
 import com.emcaddons.gui.clickgui.widget.ToggleRow;
+import com.emcaddons.scoreboard.DungeonZoneScoreboard;
 import com.emcaddons.scoreboard.EmcStatsScoreboard;
 import com.emcaddons.scoreboard.StatCard;
 import net.minecraft.client.Minecraft;
@@ -46,6 +47,7 @@ final class ClickGuiPages {
         rows.add(new KeybindRow("Toggle Factories HUD", mod::getHudToggleFactoriesKey, mod::setHudToggleFactoriesKey, true));
         rows.add(new KeybindRow("Toggle Skyblock HUD", mod::getHudToggleSkyblockKey, mod::setHudToggleSkyblockKey, true));
         rows.add(new KeybindRow("Toggle Prisons HUD", mod::getHudTogglePrisonsKey, mod::setHudTogglePrisonsKey, true));
+        rows.add(new KeybindRow("Toggle Advanced stats", mod::getHudToggleAdvancedKey, mod::setHudToggleAdvancedKey, true));
         rows.add(new HeadingRow("HUD"));
         rows.addAll(hudControls(mod));
         return rows;
@@ -159,6 +161,13 @@ final class ClickGuiPages {
             if (c != null) c.setVisible(v);
             mod.persistHudLayout();
         }));
+        rows.add(new ToggleRow("Advanced stats", () -> mod.getHudLayoutManager().isAdvanced(), v -> {
+            mod.getHudLayoutManager().setAdvanced(v);
+            mod.persistHudLayout();
+        }));
+        rows.add(new ButtonRow("EMC Stats rows", "Open...", () -> gui.openPage(ClickGuiScreen.Page.SETTINGS_ROWS)));
+        DungeonZoneScoreboard zone = mod.getDungeonZoneScoreboard();
+        rows.add(new HeadingRow("ZONE"));
         rows.add(new ToggleRow("Zone card visible", () -> {
             var c = mod.getHudLayoutManager().get("dungeonzone");
             return c != null && c.isVisible();
@@ -167,15 +176,14 @@ final class ClickGuiPages {
             if (c != null) c.setVisible(v);
             mod.persistHudLayout();
         }));
-        rows.add(new ToggleRow("Advanced stats", () -> {
-            var c = mod.getHudLayoutManager().get("emcstats");
-            return c != null && c.isAdvanced();
-        }, v -> {
-            var c = mod.getHudLayoutManager().get("emcstats");
-            if (c != null) c.setAdvanced(v);
+        rows.add(new ToggleRow("Zone / Stage", zone::isShowZoneStage, v -> {
+            zone.setShowZoneStage(v);
             mod.persistHudLayout();
         }));
-        rows.add(new ButtonRow("EMC Stats rows", "Open...", () -> gui.openPage(ClickGuiScreen.Page.SETTINGS_ROWS)));
+        rows.add(new ToggleRow("Respawn time", zone::isShowRespawn, v -> {
+            zone.setShowRespawn(v);
+            mod.persistHudLayout();
+        }));
         return rows;
     }
 

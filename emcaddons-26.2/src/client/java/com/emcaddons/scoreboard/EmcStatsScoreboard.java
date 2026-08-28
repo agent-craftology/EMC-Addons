@@ -191,6 +191,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
             soulsPerHourText = formatMoney(sessionSoulsMade / hours);
             essencePerHourText = formatMoney(sessionEssenceMade / hours);
             shardsPerHourText = formatMoney(sessionShardsMade / hours);
+            // Credits/hr is session earned / grind hours only — never currentCredits / time.
             creditsPerHourText = formatMoney(sessionCreditsMade / hours);
             swingsPerHourText = formatMoney(sessionSwingsMade / hours);
         } else {
@@ -341,10 +342,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
             shardsEarned.observeBalance(snap.shards);
         }
         if (snap.hasCredits) {
+            // Credits HUD is the live wallet (Rebirth-style); never use it for session or /hr.
             currentCredits = snap.credits;
             hasCredits = true;
             lastCreditsSeenMs = System.currentTimeMillis();
-            creditsEarned.observeBalance(snap.credits);
+            // Session credits / Credits/hr only. Skip 0 so a missing parse cannot become the baseline or a fake spend.
+            if (snap.credits != 0.0) {
+                creditsEarned.observeBalance(snap.credits);
+            }
         } else if (hasCredits && System.currentTimeMillis() - lastCreditsSeenMs >= CREDITS_STALE_MS) {
             hasCredits = false;
         }
@@ -381,6 +386,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
 
     public void resetSession(Gamemode mode) {
         if (mode == null || mode == Gamemode.DUNGEONS) {
+            // Session reset zeros session credits, /hr, grind time, and sparkline — not the live Credits wallet.
             resetEarnedTrackers();
             clearSparkline();
             grindAccumulatedMs = 0;
@@ -397,6 +403,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void resetEarnedTrackers() {
+        // Do not clear currentCredits / hasCredits; those are the live wallet, not session stats.
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();

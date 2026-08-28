@@ -1,5 +1,7 @@
 package com.emcaddons.scoreboard;
 
+import java.util.function.LongSupplier;
+
 /**
  * Session-earned accumulator with a 1s sample throttle and one-sample lag.
  * Each accepted observation is held as {@code pending} until the next accepted
@@ -8,12 +10,22 @@ package com.emcaddons.scoreboard;
 public final class SessionEarnedTracker {
     private static final long BASELINE_WARMUP_MS = 2000L;
 
+    private final LongSupplier nowMs;
     private double accepted;
     private double pending;
     private double earned;
     private boolean hasBaseline;
     private long lastSampleMs;
     private long firstSeenMs;
+
+    public SessionEarnedTracker() {
+        this(System::currentTimeMillis);
+    }
+
+    /** Tests inject a clock to jump the 2s warmup and 1s sample gaps. */
+    SessionEarnedTracker(LongSupplier nowMs) {
+        this.nowMs = nowMs != null ? nowMs : System::currentTimeMillis;
+    }
 
     public void reset() {
         accepted = 0.0;
@@ -28,10 +40,13 @@ public final class SessionEarnedTracker {
      * Record an observed wallet/scoreboard balance. The first observation starts
      * a 2s warmup; the baseline is the balance seen after that delay. Later
      * samples closer than 1000 ms to the last accepted sample are ignored.
+     * Once a positive baseline exists, {@code 0} is ignored so a sidebar flicker
+     * cannot become a fake spend (a later recovery would otherwise confirm the
+     * full wallet as session earned).
      */
     public void observeBalance(double newBalance) {
         if (Double.isNaN(newBalance) || Double.isInfinite(newBalance)) return;
-        long now = System.currentTimeMillis();
+        long now = nowMs.getAsLong();
         if (!hasBaseline) {
             if (firstSeenMs == 0L) firstSeenMs = now;
             if (now - firstSeenMs < BASELINE_WARMUP_MS) return;
@@ -41,6 +56,7 @@ public final class SessionEarnedTracker {
             lastSampleMs = now;
             return;
         }
+        if (accepted > 0.0 && newBalance == 0.0) return;
         if (now - lastSampleMs < 1000L) return;
         lastSampleMs = now;
         if (newBalance >= pending) {

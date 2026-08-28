@@ -186,6 +186,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
             soulsPerHourText = formatMoney(sessionSoulsMade / hours);
             essencePerHourText = formatMoney(sessionEssenceMade / hours);
             shardsPerHourText = formatMoney(sessionShardsMade / hours);
+            // Credits/hr is session earned / grind hours — never currentCredits / time.
             creditsPerHourText = formatMoney(sessionCreditsMade / hours);
             swingsPerHourText = formatMoney(sessionSwingsMade / hours);
         } else {
@@ -324,10 +325,11 @@ public final class EmcStatsScoreboard implements StatCardSource {
             shardsEarned.observeBalance(snap.shards);
         }
         if (snap.hasCredits) {
+            // Credits row copies the live wallet like Rebirth. Session/rate are separate; skip 0 so a missed parse cannot become baseline or a fake spend.
             currentCredits = snap.credits;
             hasCredits = true;
             lastCreditsSeenMs = System.currentTimeMillis();
-            creditsEarned.observeBalance(snap.credits);
+            if (snap.credits != 0.0) creditsEarned.observeBalance(snap.credits);
         } else if (hasCredits && lastCreditsSeenMs != 0L
                 && System.currentTimeMillis() - lastCreditsSeenMs >= CREDITS_STALE_MS) {
             hasCredits = false;
@@ -341,6 +343,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     /**
      * Clears dungeon session earned, rates, sparkline, and grind time.
      * Does not run on world change; Hub time stays excluded by pause/resume.
+     * Does not clear currentCredits/hasCredits — the live wallet is not session state.
      */
     public void resetSession() {
         resetEarnedTrackers();
@@ -391,6 +394,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();
+        // Session credits and Credits/hr only — currentCredits/hasCredits stay as the live wallet.
         creditsEarned.reset();
         swingsEarned.reset();
         sessionSoulsText = "0.00";

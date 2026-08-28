@@ -182,6 +182,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
             soulsPerHourText = formatMoney(sessionSoulsMade / hours);
             essencePerHourText = formatMoney(sessionEssenceMade / hours);
             shardsPerHourText = formatMoney(sessionShardsMade / hours);
+            // Credits/hr is session-earned / grind hours only — never currentCredits / time.
             creditsPerHourText = formatMoney(sessionCreditsMade / hours);
             swingsPerHourText = formatMoney(sessionSwingsMade / hours);
         } else {
@@ -204,6 +205,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     /**
      * Clears dungeon session earned, rates, sparkline, and grind time.
      * Does not run on world change; Hub time is already excluded by pause.
+     * Does not clear currentCredits/hasCredits — those are the live wallet.
      */
     public void resetSession() {
         resetEarnedTrackers();
@@ -347,10 +349,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
             shardsEarned.observeBalance(snap.shards);
         }
         if (snap.hasCredits) {
+            // Credits HUD copies the sidebar wallet (rebirth-style). Never use this for session or /hr.
             currentCredits = snap.credits;
             hasCredits = true;
             lastCreditsSeenMs = System.currentTimeMillis();
-            creditsEarned.observeBalance(snap.credits);
+            // Session/rate only; skip 0 so a missing parse cannot become the baseline or a fake spend.
+            if (snap.credits != 0.0) {
+                creditsEarned.observeBalance(snap.credits);
+            }
         } else if (hasCredits && lastCreditsSeenMs != 0L
                 && System.currentTimeMillis() - lastCreditsSeenMs >= CREDITS_STALE_MS) {
             hasCredits = false;
@@ -398,6 +404,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void resetEarnedTrackers() {
+        // Session reset must not clear currentCredits/hasCredits; those are the live wallet.
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();

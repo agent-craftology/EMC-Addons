@@ -37,4 +37,20 @@ class EmcSidebarAmountTest {
     void colourCodeAndCommaForm() {
         assertEquals(1234.0, EmcSidebar.parseAmount("§a1,234"), EPS);
     }
+
+    @Test
+    void parsePlainCountScoreboardCreditsLine() {
+        String line = "│ 3,076 \u1D04\u0280\u1D07\u1D05\u026A\u1D1B\uA731";
+        assertEquals(3076.0, EmcSidebar.parsePlainCount(line), EPS);
+    }
+
+    @Test
+    void parsePlainCountCommaCredits() {
+        assertEquals(1234.0, EmcSidebar.parsePlainCount("1,234 credits"), EPS);
+    }
+
+    @Test
+    void parsePlainCountDoesNotTreatCreditsTAsTrillion() {
+        assertEquals(3076.0, EmcSidebar.parsePlainCount("3076 credits"), EPS);
+    }
 }

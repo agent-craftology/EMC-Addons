@@ -75,7 +75,7 @@ public final class EmcSidebar {
                     break;
                 case SCORE_CREDITS:
                     if (lower.contains("credits")) {
-                        creditsPos = parseAmount(text);
+                        creditsPos = parsePlainCount(text);
                         hasCreditsPos = true;
                     } else {
                         assignedByPosition = false;
@@ -109,7 +109,7 @@ public final class EmcSidebar {
                 hasShardsKw = true;
             }
             if (!hasCreditsKw && lower.contains("credits")) {
-                creditsKw = parseAmount(text);
+                creditsKw = parsePlainCount(text);
                 hasCreditsKw = true;
             }
             if (!hasSwingsKw && lower.contains("swings") && !lower.contains("swing rate")) {
@@ -247,6 +247,24 @@ public final class EmcSidebar {
             }
         }
 
+        return 0.0;
+    }
+
+    /** Plain integer count (credits/rebirth-style). Ignores K/M/B/T suffixes. */
+    public static double parsePlainCount(String text) {
+        if (text == null || text.isEmpty()) return 0.0;
+        text = normalizeSmallCaps(text);
+        text = text.replaceAll("§.", "").replace("$", "").replace(",", "").trim();
+
+        Pattern simplePattern = Pattern.compile("\\d+\\.?\\d*");
+        Matcher simpleMatcher = simplePattern.matcher(text);
+        if (simpleMatcher.find()) {
+            try {
+                return Double.parseDouble(simpleMatcher.group());
+            } catch (NumberFormatException e) {
+                return 0.0;
+            }
+        }
         return 0.0;
     }
 

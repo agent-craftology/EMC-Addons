@@ -85,6 +85,7 @@ public final class HudLayoutManager {
     private final List<CardState> cards = new ArrayList<>();
     private final Map<String, CardState> byId = new HashMap<>();
     private boolean masterVisible = true;
+    private boolean advanced = false;
     private int scalePercent = 100;
 
     private CardState draggingState;
@@ -101,6 +102,7 @@ public final class HudLayoutManager {
 
     public CardState register(StatCardSource source, int defaultX, int defaultY) {
         CardState state = new CardState(source, Anchor.TOP_LEFT, defaultX, defaultY);
+        state.advanced = this.advanced;
         cards.add(state);
         byId.put(source.id(), state);
         return state;
@@ -126,6 +128,21 @@ public final class HudLayoutManager {
 
     public void setMasterVisible(boolean visible) {
         this.masterVisible = visible;
+    }
+
+    public boolean isAdvanced() {
+        return advanced;
+    }
+
+    public void setAdvanced(boolean advanced) {
+        this.advanced = advanced;
+        for (CardState c : cards) {
+            c.advanced = advanced;
+        }
+    }
+
+    public void toggleAdvanced() {
+        setAdvanced(!this.advanced);
     }
 
     public int getScalePercent() {
@@ -374,7 +391,7 @@ public final class HudLayoutManager {
         for (int i = rects.size() - 1; i >= 0; i--) {
             Rect r = rects.get(i);
             if (StatCard.hitTab(r.x, r.y, r.w, mx, my)) {
-                r.card.advanced = !r.card.advanced;
+                toggleAdvanced();
                 return true;
             }
             if (mx >= r.x && my >= r.y && mx < r.x + r.w && my < r.y + r.h) {
@@ -478,6 +495,7 @@ public final class HudLayoutManager {
 
     public void serialize(Properties p) {
         p.setProperty("hud.masterVisible", String.valueOf(masterVisible));
+        p.setProperty("hud.advanced", String.valueOf(advanced));
         p.setProperty("hud.scale", String.valueOf(getScalePercent()));
         for (CardState c : cards) {
             String id = c.source.id();
@@ -527,5 +545,22 @@ public final class HudLayoutManager {
             String vis = p.getProperty("hud." + id + ".visible");
             if (vis != null) c.visible = Boolean.parseBoolean(vis);
         }
+        applyLoadedAdvanced(p);
+    }
+
+    private void applyLoadedAdvanced(Properties p) {
+        String globalAdv = p.getProperty("hud.advanced");
+        if (globalAdv != null) {
+            setAdvanced(Boolean.parseBoolean(globalAdv));
+            return;
+        }
+        boolean any = false;
+        for (CardState c : cards) {
+            if (c.advanced) {
+                any = true;
+                break;
+            }
+        }
+        setAdvanced(any);
     }
 }

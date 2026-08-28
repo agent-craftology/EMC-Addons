@@ -1,5 +1,7 @@
 package com.emcaddons.scoreboard;
 
+import java.util.function.LongSupplier;
+
 /**
  * Session-earned accumulator with a 1s sample throttle and one-sample lag.
  * Each accepted observation is held as {@code pending} until the next accepted
@@ -8,12 +10,21 @@ package com.emcaddons.scoreboard;
 public final class SessionEarnedTracker {
     private static final long BASELINE_WARMUP_MS = 2000L;
 
+    private final LongSupplier clock;
     private double accepted;
     private double pending;
     private double earned;
     private boolean hasBaseline;
     private long lastSampleMs;
     private long firstSeenMs;
+
+    public SessionEarnedTracker() {
+        this(System::currentTimeMillis);
+    }
+
+    SessionEarnedTracker(LongSupplier clock) {
+        this.clock = clock != null ? clock : System::currentTimeMillis;
+    }
 
     public void reset() {
         accepted = 0.0;
@@ -31,7 +42,7 @@ public final class SessionEarnedTracker {
      */
     public void observeBalance(double newBalance) {
         if (Double.isNaN(newBalance) || Double.isInfinite(newBalance)) return;
-        long now = System.currentTimeMillis();
+        long now = nowMs();
         if (!hasBaseline) {
             if (firstSeenMs == 0L) firstSeenMs = now;
             if (now - firstSeenMs < BASELINE_WARMUP_MS) return;
@@ -41,6 +52,8 @@ public final class SessionEarnedTracker {
             lastSampleMs = now;
             return;
         }
+        // Positive baseline + 0 is sidebar flicker / failed parse, not a real spend to empty.
+        if (accepted > 0.0 && newBalance == 0.0) return;
         if (now - lastSampleMs < 1000L) return;
         lastSampleMs = now;
         if (newBalance >= pending) {
@@ -52,6 +65,10 @@ public final class SessionEarnedTracker {
         } else {
             pending = newBalance;
         }
+    }
+
+    long nowMs() {
+        return clock.getAsLong();
     }
 
     /** Confirmed session earnings; does not include the unconfirmed pending sample. */

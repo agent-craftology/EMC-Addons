@@ -42,12 +42,14 @@ public class EmcAddonsClient implements ClientModInitializer {
     private KeyBinding hudToggleFactoriesBinding;
     private KeyBinding hudToggleSkyblockBinding;
     private KeyBinding hudTogglePrisonsBinding;
+    private KeyBinding hudToggleAdvancedBinding;
     private int guiOpenMenuKey = GLFW.GLFW_KEY_RIGHT_ALT;
     private int hudToggleKeyDungeons;
     private int hudToggleKeyGens;
     private int hudToggleKeyFactories;
     private int hudToggleKeySkyblock;
     private int hudToggleKeyPrisons;
+    private int hudToggleAdvancedKey;
     private boolean windowIconEnabled = true;
     private final HudLayoutManager hudLayoutManager = new HudLayoutManager();
     private final EmcStatsScoreboard emcStats = new EmcStatsScoreboard();
@@ -112,6 +114,12 @@ public class EmcAddonsClient implements ClientModInitializer {
         ));
         hudTogglePrisonsBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.emcaddons.toggle_prisons",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_UNKNOWN,
+                "key.categories.emcaddons"
+        ));
+        hudToggleAdvancedBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.emcaddons.toggle_advanced",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_UNKNOWN,
                 "key.categories.emcaddons"
@@ -196,6 +204,7 @@ public class EmcAddonsClient implements ClientModInitializer {
             try {
                 emcStats.update(client);
                 dungeonZoneScoreboard.update(client);
+                maybeSendZoneResetQuery(client);
                 while (guiKeyBinding.wasPressed()) {
                     if (client.world != null && client.player != null) {
                         client.setScreen(new ClickGuiScreen(this));
@@ -206,6 +215,7 @@ public class EmcAddonsClient implements ClientModInitializer {
                 pollHudToggle(hudToggleFactoriesBinding, hudToggleKeyFactories, "factories");
                 pollHudToggle(hudToggleSkyblockBinding, hudToggleKeySkyblock, "skyblock");
                 pollHudToggle(hudTogglePrisonsBinding, hudToggleKeyPrisons, "prisons");
+                pollAdvancedToggle();
                 boolean keysChanged = false;
                 if (guiKeyBinding != null) {
                     int controlKey = KeyBindingHelper.getBoundKeyOf(guiKeyBinding).getCode();
@@ -237,6 +247,11 @@ public class EmcAddonsClient implements ClientModInitializer {
                 int nextPrisons = syncHudToggleFromControls(hudTogglePrisonsBinding, hudToggleKeyPrisons);
                 if (nextPrisons != hudToggleKeyPrisons) {
                     hudToggleKeyPrisons = nextPrisons;
+                    keysChanged = true;
+                }
+                int nextAdvanced = syncHudToggleFromControls(hudToggleAdvancedBinding, hudToggleAdvancedKey);
+                if (nextAdvanced != hudToggleAdvancedKey) {
+                    hudToggleAdvancedKey = nextAdvanced;
                     keysChanged = true;
                 }
                 if (keysChanged) saveSettings();
@@ -452,6 +467,17 @@ public class EmcAddonsClient implements ClientModInitializer {
         saveSettings();
     }
 
+    public int getHudToggleAdvancedKey() {
+        return hudToggleAdvancedKey;
+    }
+
+    public void setHudToggleAdvancedKey(int keyCode) {
+        this.hudToggleAdvancedKey = normalizeHudToggleKey(keyCode);
+        bindHudToggle(hudToggleAdvancedBinding, hudToggleAdvancedKey);
+        KeyBinding.updateKeysByCode();
+        saveSettings();
+    }
+
     private void applyKeyBindings() {
         if (guiKeyBinding != null) {
             guiKeyBinding.setBoundKey(InputUtil.fromKeyCode(guiOpenMenuKey, 0));
@@ -461,6 +487,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         bindHudToggle(hudToggleFactoriesBinding, hudToggleKeyFactories);
         bindHudToggle(hudToggleSkyblockBinding, hudToggleKeySkyblock);
         bindHudToggle(hudTogglePrisonsBinding, hudToggleKeyPrisons);
+        bindHudToggle(hudToggleAdvancedBinding, hudToggleAdvancedKey);
         KeyBinding.updateKeysByCode();
     }
 
@@ -486,10 +513,32 @@ public class EmcAddonsClient implements ClientModInitializer {
         }
     }
 
+    private void pollAdvancedToggle() {
+        if (hudToggleAdvancedBinding == null) return;
+        while (hudToggleAdvancedBinding.wasPressed()) {
+            if (hudToggleAdvancedKey == 0) continue;
+            hudLayoutManager.toggleAdvanced();
+            persistHudLayout();
+        }
+    }
+
     private static int syncHudToggleFromControls(KeyBinding binding, int storedKey) {
         if (binding == null) return storedKey;
         int controlKey = KeyBindingHelper.getBoundKeyOf(binding).getCode();
         return controlKey < 0 ? 0 : controlKey;
+    }
+
+    private boolean isZoneRespawnQueryEnabled() {
+        if (!hudLayoutManager.isMasterVisible()) return false;
+        HudLayoutManager.CardState card = hudLayoutManager.get("dungeonzone");
+        return card != null && card.isVisible();
+    }
+
+    private void maybeSendZoneResetQuery(MinecraftClient client) {
+        if (client == null || client.player == null) return;
+        if (!dungeonZoneScoreboard.shouldSendQuery(client, isZoneRespawnQueryEnabled())) return;
+        dungeonZoneScoreboard.markQuerySent();
+        client.player.sendChatMessage("/zone reset");
     }
 
     public boolean handleOutgoingChatMessage(String message) {
@@ -609,6 +658,7 @@ public class EmcAddonsClient implements ClientModInitializer {
     private void applyEmcStatsHud(Properties map) {
         if (map == null) return;
         emcStats.loadHudVisibility(map);
+        dungeonZoneScoreboard.loadHudVisibility(map);
         EmcStatsScoreboard.Currency graph = EmcStatsScoreboard.Currency.SOULS;
         String graphValue = map.getProperty("hud.currency.graph");
         if (graphValue != null && !graphValue.isEmpty()) {
@@ -649,6 +699,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         hudToggleKeyFactories = parseHudToggleKey(map, "hudToggleKey.factories", hudToggleKeyFactories);
         hudToggleKeySkyblock = parseHudToggleKey(map, "hudToggleKey.skyblock", hudToggleKeySkyblock);
         hudToggleKeyPrisons = parseHudToggleKey(map, "hudToggleKey.prisons", hudToggleKeyPrisons);
+        hudToggleAdvancedKey = parseHudToggleKey(map, "hudToggleKey.advanced", hudToggleAdvancedKey);
         String wie = map.getProperty("windowIconEnabled");
         if (wie != null) windowIconEnabled = Boolean.parseBoolean(wie);
         String gt = map.getProperty("guiTheme");
@@ -695,6 +746,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         p.setProperty("hudToggleKey.factories", String.valueOf(hudToggleKeyFactories));
         p.setProperty("hudToggleKey.skyblock", String.valueOf(hudToggleKeySkyblock));
         p.setProperty("hudToggleKey.prisons", String.valueOf(hudToggleKeyPrisons));
+        p.setProperty("hudToggleKey.advanced", String.valueOf(hudToggleAdvancedKey));
         p.setProperty("windowIconEnabled", String.valueOf(windowIconEnabled));
         p.setProperty("guiTheme", guiTheme.name());
         p.setProperty("guiOpacity", String.valueOf(getGuiOpacity()));
@@ -703,6 +755,7 @@ public class EmcAddonsClient implements ClientModInitializer {
         p.setProperty("scoreboardsEnabled", String.valueOf(hudLayoutManager.isMasterVisible()));
         hudLayoutManager.serialize(p);
         emcStats.saveHudVisibility(p);
+        dungeonZoneScoreboard.saveHudVisibility(p);
         EmcStatsScoreboard.Currency graph = emcStats.getGraphCurrency();
         p.setProperty("hud.currency.graph", graph != null ? graph.name() : "SOULS");
         StatCard.GraphQuality graphQuality = emcStats.getGraphQuality();

@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 
 /**
  * HUD card that infers dungeon Zone/Stage from nearby mob custom names.
@@ -26,6 +27,9 @@ public final class DungeonZoneScoreboard implements StatCardSource {
     private int level = -1;
     private long lastScanMs;
     private long lastMatchMs;
+    private boolean showZoneStage = true;
+    private boolean showRespawn = true;
+    private final ZoneResetTracker respawnTracker = new ZoneResetTracker();
 
     public void update(MinecraftClient client) {
         if (client == null || client.world == null || client.player == null) {
@@ -37,6 +41,7 @@ public final class DungeonZoneScoreboard implements StatCardSource {
             clear();
             return;
         }
+        if (!showZoneStage) return;
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastScanMs < SCAN_INTERVAL_MS) return;
         lastScanMs = nowMs;
@@ -100,6 +105,54 @@ public final class DungeonZoneScoreboard implements StatCardSource {
         level = -1;
         lastScanMs = 0L;
         lastMatchMs = 0L;
+        respawnTracker.clear();
+    }
+
+    public boolean onGameMessage(String message) {
+        return respawnTracker.onGameMessage(message);
+    }
+
+    public boolean shouldSendQuery(MinecraftClient client, boolean hudAndCardVisible) {
+        if (!hudAndCardVisible || client == null || client.world == null || client.player == null) {
+            return false;
+        }
+        EmcSidebar.Snapshot snap = EmcSidebar.read(client);
+        boolean inDungeons = snap != null && snap.location == EmcSidebar.Location.DUNGEONS;
+        return respawnTracker.shouldSendQuery(inDungeons, true, showRespawn);
+    }
+
+    public boolean isShowZoneStage() {
+        return showZoneStage;
+    }
+
+    public void setShowZoneStage(boolean showZoneStage) {
+        this.showZoneStage = showZoneStage;
+    }
+
+    public boolean isShowRespawn() {
+        return showRespawn;
+    }
+
+    public void setShowRespawn(boolean showRespawn) {
+        this.showRespawn = showRespawn;
+    }
+
+    public void loadHudVisibility(Properties map) {
+        if (map == null) return;
+        String zoneStage = map.getProperty("hud.dungeonzone.showZoneStage");
+        if (zoneStage != null) showZoneStage = Boolean.parseBoolean(zoneStage);
+        String respawn = map.getProperty("hud.dungeonzone.showRespawn");
+        if (respawn != null) showRespawn = Boolean.parseBoolean(respawn);
+    }
+
+    public void saveHudVisibility(Properties p) {
+        if (p == null) return;
+        p.setProperty("hud.dungeonzone.showZoneStage", String.valueOf(showZoneStage));
+        p.setProperty("hud.dungeonzone.showRespawn", String.valueOf(showRespawn));
+    }
+
+    public void markQuerySent() {
+        respawnTracker.markQuerySent();
     }
 
     private static String display(int value) {
@@ -138,18 +191,26 @@ public final class DungeonZoneScoreboard implements StatCardSource {
 
     @Override
     public List<StatRow> basicRows() {
-        List<StatRow> rows = new ArrayList<>();
-        rows.add(new StatRow("Zone", display(zone)));
-        rows.add(new StatRow("Stage", display(stage)));
-        return rows;
+        return zoneRows(false);
     }
 
     @Override
     public List<StatRow> advancedRows() {
+        return zoneRows(true);
+    }
+
+    private List<StatRow> zoneRows(boolean advanced) {
         List<StatRow> rows = new ArrayList<>();
-        rows.add(new StatRow("Zone", display(zone)));
-        rows.add(new StatRow("Stage", display(stage)));
-        rows.add(new StatRow("Level", display(level)));
+        if (showZoneStage) {
+            rows.add(new StatRow("Zone", display(zone)));
+            rows.add(new StatRow("Stage", display(stage)));
+        }
+        if (showRespawn) {
+            rows.add(new StatRow("Respawn", respawnTracker.formatRemaining()));
+        }
+        if (advanced) {
+            rows.add(new StatRow("Level", display(level)));
+        }
         return rows;
     }
 }

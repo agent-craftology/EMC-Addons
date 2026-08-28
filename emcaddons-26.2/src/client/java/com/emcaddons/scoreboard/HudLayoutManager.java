@@ -47,12 +47,15 @@ public final class HudLayoutManager {
 
     private final List<CardState> cards = new ArrayList<>();
     private boolean masterVisible = true;
+    private boolean advanced = false;
     private CardState draggingCard;
     private int dragOffX;
     private int dragOffY;
 
     public void register(StatCardSource source, int defaultX, int defaultY) {
-        cards.add(new CardState(source, defaultX, defaultY));
+        CardState state = new CardState(source, defaultX, defaultY);
+        state.advanced = this.advanced;
+        cards.add(state);
     }
 
     public List<CardState> getCards() {
@@ -65,6 +68,21 @@ public final class HudLayoutManager {
 
     public void setMasterVisible(boolean masterVisible) {
         this.masterVisible = masterVisible;
+    }
+
+    public boolean isAdvanced() {
+        return advanced;
+    }
+
+    public void setAdvanced(boolean advanced) {
+        this.advanced = advanced;
+        for (CardState c : cards) {
+            c.advanced = advanced;
+        }
+    }
+
+    public void toggleAdvanced() {
+        setAdvanced(!this.advanced);
     }
 
     public CardState get(String id) {
@@ -136,7 +154,7 @@ public final class HudLayoutManager {
             int x = resolveX(c, w);
             int y = resolveY(c, h);
             if (StatCard.hitTab(x, y, w, mouseX, mouseY)) {
-                c.advanced = !c.advanced;
+                toggleAdvanced();
                 return true;
             }
             if (GuiDraw.hit(mouseX, mouseY, x, y, w, h)) {
@@ -199,6 +217,7 @@ public final class HudLayoutManager {
 
     public void serialize(Properties p) {
         p.setProperty("hud.masterVisible", String.valueOf(masterVisible));
+        p.setProperty("hud.advanced", String.valueOf(advanced));
         for (CardState c : cards) {
             String id = c.source.id();
             p.setProperty("hud." + id + ".anchor", c.anchor.name());
@@ -240,5 +259,22 @@ public final class HudLayoutManager {
             String vis = p.getProperty("hud." + id + ".visible");
             if (vis != null) c.visible = Boolean.parseBoolean(vis);
         }
+        applyLoadedAdvanced(p);
+    }
+
+    private void applyLoadedAdvanced(Properties p) {
+        String globalAdv = p.getProperty("hud.advanced");
+        if (globalAdv != null) {
+            setAdvanced(Boolean.parseBoolean(globalAdv));
+            return;
+        }
+        boolean any = false;
+        for (CardState c : cards) {
+            if (c.advanced) {
+                any = true;
+                break;
+            }
+        }
+        setAdvanced(any);
     }
 }

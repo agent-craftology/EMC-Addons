@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 
 /**
  * HUD card for dungeon zone/stage inferred from nearby mob nameplates.
@@ -21,11 +22,44 @@ public final class DungeonZoneScoreboard implements StatCardSource {
     private static final long STALE_TIMEOUT_MS = 15_000L;
     public static final double SCAN_RANGE = 24.0;
 
+    private final ZoneResetTracker respawnTracker = new ZoneResetTracker();
     private String zoneText = "N/A";
     private String stageText = "N/A";
     private String levelText = "N/A";
     private long lastScanMs;
     private long lastMatchMs;
+    private boolean showZoneStage = true;
+    private boolean showRespawn = true;
+
+    public boolean isShowZoneStage() {
+        return showZoneStage;
+    }
+
+    public void setShowZoneStage(boolean showZoneStage) {
+        this.showZoneStage = showZoneStage;
+    }
+
+    public boolean isShowRespawn() {
+        return showRespawn;
+    }
+
+    public void setShowRespawn(boolean showRespawn) {
+        this.showRespawn = showRespawn;
+    }
+
+    public void loadHudVisibility(Properties map) {
+        if (map == null) return;
+        String zoneStage = map.getProperty("hud.dungeonzone.showZoneStage");
+        if (zoneStage != null) showZoneStage = Boolean.parseBoolean(zoneStage);
+        String respawn = map.getProperty("hud.dungeonzone.showRespawn");
+        if (respawn != null) showRespawn = Boolean.parseBoolean(respawn);
+    }
+
+    public void saveHudVisibility(Properties p) {
+        if (p == null) return;
+        p.setProperty("hud.dungeonzone.showZoneStage", String.valueOf(showZoneStage));
+        p.setProperty("hud.dungeonzone.showRespawn", String.valueOf(showRespawn));
+    }
 
     public void update(MinecraftClient client) {
         if (client == null || client.world == null || client.player == null) {
@@ -37,6 +71,7 @@ public final class DungeonZoneScoreboard implements StatCardSource {
             clear();
             return;
         }
+        if (!showZoneStage) return;
         long now = System.currentTimeMillis();
         if (lastScanMs != 0L && now - lastScanMs < SCAN_INTERVAL_MS) return;
         lastScanMs = now;
@@ -69,7 +104,10 @@ public final class DungeonZoneScoreboard implements StatCardSource {
 
         if (counts.isEmpty()) {
             if (lastMatchMs != 0L && now - lastMatchMs >= STALE_TIMEOUT_MS) {
-                clear();
+                zoneText = "N/A";
+                stageText = "N/A";
+                levelText = "N/A";
+                lastMatchMs = 0L;
             }
             return;
         }
@@ -101,6 +139,21 @@ public final class DungeonZoneScoreboard implements StatCardSource {
         levelText = "N/A";
         lastScanMs = 0L;
         lastMatchMs = 0L;
+        respawnTracker.clear();
+    }
+
+    public boolean onGameMessage(String text) {
+        return respawnTracker.onGameMessage(text);
+    }
+
+    public boolean shouldSendQuery(MinecraftClient client, boolean masterVisible, boolean zoneCardVisible) {
+        if (client == null || client.world == null || client.player == null) return false;
+        boolean inDungeons = EmcSidebar.read(client).location == EmcSidebar.Location.DUNGEONS;
+        return respawnTracker.shouldSendQuery(inDungeons, masterVisible, zoneCardVisible, showRespawn);
+    }
+
+    public void markQuerySent() {
+        respawnTracker.markQuerySent();
     }
 
     @Override
@@ -136,16 +189,19 @@ public final class DungeonZoneScoreboard implements StatCardSource {
     @Override
     public List<StatRow> basicRows() {
         List<StatRow> rows = new ArrayList<>();
-        rows.add(new StatRow("Zone", zoneText));
-        rows.add(new StatRow("Stage", stageText));
+        if (showZoneStage) {
+            rows.add(new StatRow("Zone", zoneText));
+            rows.add(new StatRow("Stage", stageText));
+        }
+        if (showRespawn) {
+            rows.add(new StatRow("Respawn", respawnTracker.remainingText()));
+        }
         return rows;
     }
 
     @Override
     public List<StatRow> advancedRows() {
-        List<StatRow> rows = new ArrayList<>();
-        rows.add(new StatRow("Zone", zoneText));
-        rows.add(new StatRow("Stage", stageText));
+        List<StatRow> rows = new ArrayList<>(basicRows());
         rows.add(new StatRow("Level", levelText));
         return rows;
     }

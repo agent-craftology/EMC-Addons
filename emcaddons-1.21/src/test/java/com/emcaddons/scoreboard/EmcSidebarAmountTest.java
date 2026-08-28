@@ -32,4 +32,16 @@ class EmcSidebarAmountTest {
     void stripsColorAndCommas() {
         assertEquals(1234.0, EmcSidebar.parseAmount("§a1,234"), EPS);
     }
+
+    @Test
+    void parsePlainCountSmallCapsCreditsLine() {
+        assertEquals(3076.0, EmcSidebar.parsePlainCount(
+                "│ 3,076 \u1D04\u0280\u1D07\u1D05\u026A\u1D1B\uA731"), EPS);
+    }
+
+    @Test
+    void parsePlainCountCreditsIgnoresSuffixLetters() {
+        assertEquals(1234.0, EmcSidebar.parsePlainCount("1,234 credits"), EPS);
+        assertEquals(3076.0, EmcSidebar.parsePlainCount("3076 credits"), EPS);
+    }
 }

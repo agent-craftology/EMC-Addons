@@ -242,6 +242,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     /**
      * Clears dungeon session earned, rates, sparkline, and grind time.
      * Does not run automatically on world/server changes.
+     * Does not clear currentCredits/hasCredits — Credits is the live wallet, not session.
      */
     public void resetSession() {
         resetSession(GameMode.DUNGEONS);
@@ -307,10 +308,12 @@ public final class EmcStatsScoreboard implements StatCardSource {
             if (sessionActive) shardsEarned.observeBalance(snap.shards);
         }
         if (snap.hasCredits) {
+            // Credits row is the live wallet (rebirth-style). Never use it for session or /hr.
             currentCredits = snap.credits;
             hasCredits = true;
             lastCreditsSeenMs = System.currentTimeMillis();
-            if (sessionActive) creditsEarned.observeBalance(snap.credits);
+            // Session/rate tracker: skip 0 so a missing parse cannot become baseline or a fake spend.
+            if (sessionActive && snap.credits != 0.0) creditsEarned.observeBalance(snap.credits);
         } else if (hasCredits && System.currentTimeMillis() - lastCreditsSeenMs >= CREDITS_STALE_MS) {
             hasCredits = false;
         }
@@ -333,14 +336,14 @@ public final class EmcStatsScoreboard implements StatCardSource {
             cachedEssencePerHour = cachedSessionEssence / activeHours;
             cachedShardsPerHour = cachedSessionShards / activeHours;
             cachedSwingsPerHour = cachedSessionSwings / activeHours;
-            cachedCreditsPerHour = cachedSessionCredits / activeHours;
         } else {
             cachedSoulsPerHour = 0.0;
             cachedEssencePerHour = 0.0;
             cachedShardsPerHour = 0.0;
             cachedSwingsPerHour = 0.0;
-            cachedCreditsPerHour = 0.0;
         }
+        // Credits/hr is session earned / grind hours — never currentCredits / time.
+        cachedCreditsPerHour = creditsPerHour(cachedSessionCredits, cachedActiveMs);
     }
 
     private void resumeGrind() {
@@ -367,6 +370,7 @@ public final class EmcStatsScoreboard implements StatCardSource {
     }
 
     private void resetEarnedTrackers() {
+        // Session totals only. Do not clear currentCredits/hasCredits — wallet is not session earned.
         soulsEarned.reset();
         essenceEarned.reset();
         shardsEarned.reset();
@@ -377,6 +381,13 @@ public final class EmcStatsScoreboard implements StatCardSource {
         cachedSessionShards = 0.0;
         cachedSessionCredits = 0.0;
         cachedSessionSwings = 0.0;
+    }
+
+    /** Session credits / grind hours. Do not pass currentCredits (live wallet). */
+    static double creditsPerHour(double sessionEarned, long grindElapsedMs) {
+        if (grindElapsedMs < RATE_WARMUP_MS) return 0.0;
+        double grindHours = grindElapsedMs / 3_600_000.0;
+        return grindHours > 0 ? sessionEarned / grindHours : 0.0;
     }
 
     private static String formatRate(double value, long activeMs) {

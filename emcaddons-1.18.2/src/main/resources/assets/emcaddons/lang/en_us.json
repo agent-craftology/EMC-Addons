@@ -5,5 +5,6 @@
   "key.emcaddons.toggle_gens": "Toggle Gens HUD",
   "key.emcaddons.toggle_factories": "Toggle Factories HUD",
   "key.emcaddons.toggle_skyblock": "Toggle Skyblock HUD",
-  "key.emcaddons.toggle_prisons": "Toggle Prisons HUD"
+  "key.emcaddons.toggle_prisons": "Toggle Prisons HUD",
+  "key.emcaddons.toggle_advanced": "Toggle Advanced stats"
 }

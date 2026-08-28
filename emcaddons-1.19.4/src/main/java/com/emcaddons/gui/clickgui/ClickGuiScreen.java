@@ -130,6 +130,7 @@ public class ClickGuiScreen extends Screen {
         rows.add(new SettingRow.Keybind("Toggle Factories HUD", mod::getHudToggleFactoriesKey, mod::setHudToggleFactoriesKey, true));
         rows.add(new SettingRow.Keybind("Toggle Skyblock HUD", mod::getHudToggleSkyblockKey, mod::setHudToggleSkyblockKey, true));
         rows.add(new SettingRow.Keybind("Toggle Prisons HUD", mod::getHudTogglePrisonsKey, mod::setHudTogglePrisonsKey, true));
+        rows.add(new SettingRow.Keybind("Toggle Advanced stats", mod::getHudToggleAdvancedKey, mod::setHudToggleAdvancedKey, true));
         rows.add(new SettingRow.Section("HUD"));
         rows.add(new SettingRow.Button("Edit HUD layout", () -> {
             if (client != null) client.setScreen(new com.emcaddons.gui.HudEditScreen(mod.getHudLayoutManager(), mod::persistHudLayout));
@@ -244,9 +245,24 @@ public class ClickGuiScreen extends Screen {
                         mod.persistHudLayout();
                     }));
             rows.add(hudVisibleToggle("EMC Stats card visible", "emcstats"));
-            rows.add(hudVisibleToggle("Zone card visible", "dungeonzone"));
-            rows.add(hudAdvancedToggle("Advanced stats", "emcstats"));
+            rows.add(hudAdvancedToggle("Advanced stats"));
             rows.add(new SettingRow.Button("EMC Stats rows", () -> setPage(Page.SETTINGS_ROWS)));
+            rows.add(new SettingRow.Section("ZONE"));
+            rows.add(hudVisibleToggle("Zone card visible", "dungeonzone"));
+            rows.add(new SettingRow.Toggle("Zone / Stage",
+                    () -> mod.getDungeonZoneScoreboard().isShowZoneStage(),
+                    () -> {
+                        var dz = mod.getDungeonZoneScoreboard();
+                        dz.setShowZoneStage(!dz.isShowZoneStage());
+                        mod.persistHudLayout();
+                    }));
+            rows.add(new SettingRow.Toggle("Respawn time",
+                    () -> mod.getDungeonZoneScoreboard().isShowRespawn(),
+                    () -> {
+                        var dz = mod.getDungeonZoneScoreboard();
+                        dz.setShowRespawn(!dz.isShowRespawn());
+                        mod.persistHudLayout();
+                    }));
         }
         rows.add(new SettingRow.Button("Reset statistics", () -> {
             EmcStatsScoreboard sb = mod.getEmcStatsScoreboard();
@@ -303,18 +319,12 @@ public class ClickGuiScreen extends Screen {
                 });
     }
 
-    private SettingRow.Toggle hudAdvancedToggle(String label, String id) {
+    private SettingRow.Toggle hudAdvancedToggle(String label) {
         return new SettingRow.Toggle(label,
+                () -> mod.getHudLayoutManager().isAdvanced(),
                 () -> {
-                    var c = mod.getHudLayoutManager().get(id);
-                    return c != null && c.isAdvanced();
-                },
-                () -> {
-                    var c = mod.getHudLayoutManager().get(id);
-                    if (c != null) {
-                        c.setAdvanced(!c.isAdvanced());
-                        mod.persistHudLayout();
-                    }
+                    mod.getHudLayoutManager().toggleAdvanced();
+                    mod.persistHudLayout();
                 });
     }
 
